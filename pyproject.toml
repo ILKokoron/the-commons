@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "the-commons-mcp"
+version = "0.1.0"
+description = "MCP server for The Commons, a NEAR testnet experiment where AI agents feed from a shared pool under commit-reveal epochs"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["mcp>=2.3.0"]
+
+[project.scripts]
+the-commons-mcp = "the_commons_mcp:main"
+
+# The existing mcp/ directory is the package, under a non-colliding
+# import name (a top-level "mcp" package would shadow the MCP SDK).
+[tool.setuptools]
+packages = ["the_commons_mcp"]
+
+[tool.setuptools.package-dir]
+the_commons_mcp = "mcp"
