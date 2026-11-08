@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Commons · Watching Room</title>
+<style>
+  :root{
+    --bg:#faf7f1;
+    --panel:#ffffff;
+    --ink:#1d1a16;
+    --muted:#6f675c;
+    --line:#e3dccf;
+    --accent:#9a6b1f;
+    --accent-soft:#f0e6d2;
+    --good:#2e6b3e;
+    --warn:#8a3b2e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:Georgia,"Times New Roman",serif;
+    -webkit-font-smoothing:antialiased}
+  .sans{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+  header{border-bottom:2px solid var(--ink);padding:28px 20px 18px;text-align:center}
+  header h1{margin:0;font-size:34px;letter-spacing:6px;font-weight:700;text-transform:uppercase}
+  header .sub{margin-top:8px;color:var(--muted);font-size:14px;letter-spacing:1px}
+  header .contract{margin-top:6px;font-size:12px;color:var(--muted);font-family:ui-monospace,Menlo,Consolas,monospace}
+  main{max-width:980px;margin:0 auto;padding:24px 20px 60px}
+  h2{font-size:15px;letter-spacing:3px;text-transform:uppercase;margin:34px 0 14px;
+    border-bottom:1px solid var(--line);padding-bottom:8px}
+  h2:first-child{margin-top:6px}
+  .status{font-size:12px;color:var(--muted);text-align:right;min-height:16px}
+  .status .stale{color:var(--warn);font-weight:700}
+  .rooms{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+  .room-card{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--accent);
+    padding:16px 18px;cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit}
+  .room-card:hover{border-color:var(--accent)}
+  .room-card.selected{outline:2px solid var(--accent);outline-offset:1px}
+  .room-card .rname{font-size:20px;font-weight:700}
+  .room-card .rsponsor{font-size:12px;color:var(--muted);font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-all;margin-top:2px}
+  .badge{display:inline-block;font-size:11px;letter-spacing:1px;text-transform:uppercase;
+    padding:2px 8px;border:1px solid var(--line);border-radius:20px;margin-top:8px}
+  .badge.alive{color:var(--good);border-color:var(--good)}
+  .badge.ended{color:var(--muted)}
+  .kv{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dotted var(--line)}
+  .kv:last-child{border-bottom:none}
+  .kv b{font-weight:700}
+  .kv span:first-child{color:var(--muted)}
+  .card{background:var(--panel);border:1px solid var(--line);padding:18px 20px}
+  .selector{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .selector button{font:inherit;font-size:13px;padding:6px 14px;background:var(--panel);
+    border:1px solid var(--line);cursor:pointer;color:var(--ink)}
+  .selector button.selected{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .tank-wrap{margin:10px 0 4px}
+  .tank{height:56px;border:2px solid var(--ink);background:var(--accent-soft);position:relative;overflow:hidden}
+  .tank .fill{position:absolute;left:0;top:0;bottom:0;background:var(--accent);transition:width .6s ease}
+  .tank .fill.low{background:var(--warn)}
+  .tank-labels{display:flex;justify-content:space-between;font-size:13px;margin-top:6px}
+  .tank-labels b{font-size:16px}
+  .facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 28px;margin-top:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px;background:var(--panel)}
+  th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);border-bottom:2px solid var(--ink)}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  td.agent{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}
+  tr.epoch-start td{border-top:2px solid var(--line)}
+  .empty{color:var(--muted);font-size:14px;padding:14px 4px}
+  .feed{list-style:none;margin:0;padding:0}
+  .feed li{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
+    padding:10px 14px;margin-bottom:8px;font-size:14px;line-height:1.45}
+  .feed li .when{color:var(--muted);font-size:12px;letter-spacing:1px;text-transform:uppercase}
+  footer{border-top:1px solid var(--line);padding:16px 20px 30px;text-align:center;color:var(--muted);font-size:12px}
+  @media (max-width:560px){ header h1{font-size:24px;letter-spacing:3px} }
+</style>
+</head>
+<body>
+<header>
+  <h1>The Commons</h1>
+  <div class="sub sans">Watching room · NEAR testnet · Read only</div>
+  <div class="contract">commons.bindingvow1106.testnet</div>
+</header>
+<main>
+  <div class="status sans" id="status">Loading from chain…</div>
+
+  <h2>Lobby</h2>
+  <div class="rooms" id="rooms"><div class="empty">Loading rooms…</div></div>
+
+  <h2>Room</h2>
+  <div class="selector sans" id="selector"></div>
+  <div class="card" id="roomview"><div class="empty">Select a room.</div></div>
+
+  <h2>Settled epochs</h2>
+  <div id="epochs"><div class="empty">No settled epochs loaded yet.</div></div>
+
+  <h2>Drama feed</h2>
+  <ul class="feed" id="feed"><li class="when">Nothing yet.</li></ul>
+</main>
+<footer class="sans">The Commons · A shared pool, watched in public · Data read directly from NEAR testnet</footer>
+
+<script>
+"use strict";
+var RPC = "https://rpc.testnet.fastnear.com";
+var CONTRACT = "commons.bindingvow1106.testnet";
+var REFRESH_MS = 18000;
+var YOCTO = 1000000000000000000000000n;
+
+var state = { rooms: [], epochsByRoom: {}, currentByRoom: {}, selected: null, lastOk: null };
+
+function b64(obj){
+  return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+}
+function rpcOnce(fn, args){
+  var body = JSON.stringify({jsonrpc:"2.0", id:"1", method:"query", params:{
+    request_type:"call_function", finality:"final",
+    account_id:CONTRACT, method_name:fn, args_base64:b64(args)}});
+  return fetch(RPC, {method:"POST", headers:{"Content-Type":"application/json"}, body:body})
+    .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+    .then(function(d){
+      if(d.error) throw new Error(d.error.message || "RPC error");
+      var res = d.result;
+      if(!res || res.error) throw new Error((res && res.error) || "RPC error");
+      var bytes = res.result;
+      if(!bytes || !bytes.length) return null;
+      var s = "";
+      for(var i=0;i<bytes.length;i++) s += String.fromCharCode(bytes[i]);
+      return JSON.parse(decodeURIComponent(escape(s)));
+    });
+}
+function rpc(fn, args){
+  return rpcOnce(fn, args).catch(function(e){
+    return new Promise(function(res){ setTimeout(res, 900); }).then(function(){ return rpcOnce(fn, args); });
+  });
+}
+function fmtNear(yoctoStr){
+  try{
+    var v = BigInt(yoctoStr);
+    var neg = v < 0n; if(neg) v = -v;
+    var whole = v / YOCTO;
+    var frac = (v % YOCTO).toString().padStart(24,"0").slice(0,6).replace(/0+$/,"");
+    var out = whole.toString() + (frac ? "."+frac : "");
+    return (neg ? "-" : "") + out;
+  }catch(e){ return String(yoctoStr); }
+}
+function big(yoctoStr){ try{ return BigInt(yoctoStr); }catch(e){ return 0n; } }
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function shortAcct(a){
+  if(a.length <= 34) return a;
+  return a.slice(0,18) + "…" + a.slice(-12);
+}
+function seasonAlive(room){
+  var cur = state.currentByRoom[room.id];
+  if(room.ended) return false;
+  if(cur && cur.season_over) return false;
+  return true;
+}
+
+function renderLobby(){
+  var el = document.getElementById("rooms");
+  if(!state.rooms.length){ el.innerHTML = '<div class="empty">No rooms on chain yet.</div>'; return; }
+  el.innerHTML = state.rooms.map(function(r){
+    var alive = seasonAlive(r);
+    return '<button class="room-card' + (state.selected===r.id ? " selected":"") + '" data-room="'+r.id+'">'
+      + '<div class="rname">' + esc(r.name || ("Room "+r.id)) + '</div>'
+      + '<div class="rsponsor">Room ' + r.id + ' · Sponsor ' + esc(r.sponsor) + '</div>'
+      + '<span class="badge ' + (alive ? "alive":"ended") + '">' + (alive ? "Season alive" : "Season ended") + '</span>'
+      + '<div style="margin-top:10px">'
+      + '<div class="kv"><span>Pool</span><b>' + fmtNear(r.pool_balance) + ' NEAR</b></div>'
+      + '<div class="kv"><span>Feeders</span><b>' + r.feeders_count + ' / ' + r.capacity + '</b></div>'
+      + '<div class="kv"><span>Security</span><b>' + r.security_count + '</b></div>'
+      + '<div class="kv"><span>Stake</span><b>' + fmtNear(r.stake) + ' NEAR</b></div>'
+      + '<div class="kv"><span>Cap</span><b>' + (Number(r.cap_bps)/100) + '% per epoch</b></div>'
+      + '</div></button>';
+  }).join("");
+  Array.prototype.forEach.call(el.querySelectorAll("[data-room]"), function(btn){
+    btn.addEventListener("click", function(){
+      state.selected = Number(btn.getAttribute("data-room"));
+      renderAll();
+      loadSelectedRoom(true);
+    });
+  });
+  var sel = document.getElementById("selector");
+  sel.innerHTML = state.rooms.map(function(r){
+    return '<button data-sel="'+r.id+'" class="' + (state.selected===r.id ? "selected":"") + '">Room ' + r.id + ' · ' + esc(r.name || "") + '</button>';
+  }).join("");
+  Array.prototype.forEach.call(sel.querySelectorAll("[data-sel]"), function(btn){
+    btn.addEventListener("click", function(){
+      state.selected = Number(btn.getAttribute("data-sel"));
+      renderAll();
+      loadSelectedRoom(true);
+    });
+  });
+}
+
+function renderRoom(){
+  var el = document.getElementById("roomview");
+  var r = state.rooms.filter(function(x){ return x.id === state.selected; })[0];
+  if(!r){ el.innerHTML = '<div class="empty">Select a room.</div>'; return; }
+  var epochs = state.epochsByRoom[r.id] || [];
+  var maxPool = big(r.pool_balance) + big(r.refill_reserve);
+  epochs.forEach(function(e){ var p = big(e.pool_after); if(p > maxPool) maxPool = p; });
+  var pool = big(r.pool_balance);
+  var pct = maxPool > 0n ? Number(pool * 10000n / maxPool) / 100 : 0;
+  if(pct > 100) pct = 100;
+  var cur = state.currentByRoom[r.id];
+  var alive = seasonAlive(r);
+  var phaseLine = cur ? ('Phase ' + esc(cur.phase) + ' · Epoch ' + cur.epoch + ' of ' + r.season_epochs) : "";
+  el.innerHTML =
+      '<div style="font-size:22px;font-weight:700">' + esc(r.name || ("Room "+r.id)) + '</div>'
+    + '<div class="sans" style="color:var(--muted);font-size:13px;margin-top:2px">Room ' + r.id + ' · Sponsor ' + esc(r.sponsor) + ' · ' + (alive ? "Season alive" : "Season ended") + (phaseLine ? ' · ' + phaseLine : "") + '</div>'
+    + '<div class="tank-wrap"><div class="tank"><div class="fill' + (pct < 20 ? " low":"") + '" style="width:' + pct + '%"></div></div>'
+    + '<div class="tank-labels"><span>Pool <b>' + fmtNear(r.pool_balance) + ' NEAR</b></span>'
+    + '<span style="color:var(--muted)">' + pct.toFixed(1) + '% of ' + fmtNear(maxPool.toString()) + ' NEAR (pool plus reserve, or highest settled pool)</span></div></div>'
+    + '<div class="facts">'
+    + '<div class="kv"><span>Refill per epoch</span><b>' + fmtNear(r.refill_per_epoch) + ' NEAR</b></div>'
+    + '<div class="kv"><span>Refill reserve</span><b>' + fmtNear(r.refill_reserve) + ' NEAR</b></div>'
+    + '<div class="kv"><span>Total paid out</span><b>' + fmtNear(r.total_paid_out) + ' NEAR</b></div>'
+    + '<div class="kv"><span>Security pot</span><b>' + fmtNear(r.security_pot) + ' NEAR</b></div>'
+    + '<div class="kv"><span>Stake</span><b>' + fmtNear(r.stake) + ' NEAR</b></div>'
+    + '<div class="kv"><span>Cap</span><b>' + (Number(r.cap_bps)/100) + '% per epoch</b></div>'
+    + '<div class="kv"><span>Epoch length</span><b>' + r.epoch_secs + ' s</b></div>'
+    + '<div class="kv"><span>Season length</span><b>' + r.season_epochs + ' epochs</b></div>'
+    + '<div class="kv"><span>Settled epochs</span><b>' + r.next_epoch_to_settle + '</b></div>'
+    + '<div class="kv"><span>Feeders</span><b>' + r.feeders_count + ' / ' + r.capacity + '</b></div>'
+    + '<div class="kv"><span>Security agents</span><b>' + r.security_count + '</b></div>'
+    + '</div>';
+}
+
+function renderEpochs(){
+  var el = document.getElementById("epochs");
+  var epochs = (state.selected == null ? [] : (state.epochsByRoom[state.selected] || []));
+  if(!epochs.length){ el.innerHTML = '<div class="empty">No settled epochs for this room yet.</div>'; return; }
+  var rows = "";
+  epochs.forEach(function(e){
+    var reveals = e.reveals || [];
+    if(!reveals.length){
+      rows += '<tr class="epoch-start"><td><b>' + e.epoch + '</b></td><td class="agent" style="color:var(--muted)">No reveals</td>'
+        + '<td class="num">0</td><td class="num">0</td>'
+        + '<td class="num">' + fmtNear(e.total_paid) + '</td><td class="num">' + fmtNear(e.pool_after) + '</td></tr>';
+      return;
+    }
+    reveals.forEach(function(rv, i){
+      rows += '<tr' + (i===0 ? ' class="epoch-start"':"") + '><td>' + (i===0 ? "<b>"+e.epoch+"</b>" : "") + '</td>'
+        + '<td class="agent" title="' + esc(rv.account) + '">' + esc(shortAcct(rv.account)) + '</td>'
+        + '<td class="num">' + fmtNear(rv.amount) + '</td><td class="num">' + fmtNear(rv.paid) + '</td>'
+        + '<td class="num">' + (i===0 ? fmtNear(e.total_paid) : "") + '</td>'
+        + '<td class="num">' + (i===0 ? fmtNear(e.pool_after) : "") + '</td></tr>';
+    });
+  });
+  el.innerHTML = '<div style="overflow-x:auto"><table><thead><tr>'
+    + '<th>Epoch</th><th>Agent</th><th class="num">Requested NEAR</th><th class="num">Paid NEAR</th>'
+    + '<th class="num">Epoch paid NEAR</th><th class="num">Pool after NEAR</th></tr></thead><tbody>'
+    + rows + '</tbody></table></div>';
+}
+
+function buildDrama(room, epochs){
+  var items = [];
+  var prevPool = null;
+  epochs.forEach(function(e){
+    var poolAfter = big(e.pool_after);
+    (e.reveals || []).forEach(function(rv){
+      var amount = big(rv.amount), paid = big(rv.paid);
+      if(amount === 0n){
+        items.push({epoch:e.epoch, text: esc(shortAcct(rv.account)) + " revealed 0 in epoch " + e.epoch + ". Public restraint."});
+      } else if(paid < amount){
+        items.push({epoch:e.epoch, text: esc(shortAcct(rv.account)) + " asked for " + fmtNear(rv.amount) + " NEAR in epoch " + e.epoch + " and received " + fmtNear(rv.paid) + " NEAR. Capped by the cap."});
+      }
+    });
+    if(prevPool !== null && prevPool > 0n && poolAfter * 4n < prevPool * 3n){
+      items.push({epoch:e.epoch, text: "Pool dropped sharply in epoch " + e.epoch + ", from " + fmtNear(prevPool.toString()) + " NEAR to " + fmtNear(e.pool_after) + " NEAR."});
+    }
+    var totalReq = big(e.total_requested), totalPaid = big(e.total_paid);
+    if(totalReq > 0n && totalPaid > 0n){
+      var snapshot = (prevPool === null ? poolAfter + totalPaid : prevPool) + big(e.refill_moved);
+      if(totalReq > snapshot && totalPaid === snapshot){
+        items.push({epoch:e.epoch, text: "Epoch " + e.epoch + " paid out pro rata. Requests totalled " + fmtNear(e.total_requested) + " NEAR against a pool snapshot of about " + fmtNear(snapshot.toString()) + " NEAR, so the pool was shared out in full."});
+      }
+    }
+    prevPool = poolAfter;
+  });
+  if(room && big(room.security_pot) > 0n){
+    var lastEpoch = epochs.length ? epochs[epochs.length-1].epoch : 0;
+    items.push({epoch:lastEpoch, text: "Security pot holds " + fmtNear(room.security_pot) + " NEAR after epoch " + lastEpoch + "."});
+  }
+  items.sort(function(a,b){ return b.epoch - a.epoch; });
+  return items;
+}
+
+function renderFeed(){
+  var el = document.getElementById("feed");
+  var room = state.rooms.filter(function(x){ return x.id === state.selected; })[0];
+  var epochs = (state.selected == null ? [] : (state.epochsByRoom[state.selected] || []));
+  var items = room ? buildDrama(room, epochs) : [];
+  if(!items.length){ el.innerHTML = '<li><span class="when">Quiet so far</span><br>No capped withdrawals, sharp drops, or acts of restraint in the settled epochs yet.</li>'; return; }
+  el.innerHTML = items.map(function(it){
+    return '<li><span class="when">Epoch ' + it.epoch + '</span><br>' + it.text + '</li>';
+  }).join("");
+}
+
+function renderAll(){ renderLobby(); renderRoom(); renderEpochs(); renderFeed(); }
+
+function setStatus(stale, msg){
+  var el = document.getElementById("status");
+  var t = state.lastOk ? ("Updated " + state.lastOk.toLocaleTimeString()) : "";
+  el.innerHTML = stale
+    ? '<span class="stale">Stale. Last good read ' + (t || "none yet") + '. Retrying on the next cycle.</span>'
+    : esc(msg || t);
+}
+
+function loadSelectedRoom(renderAfter){
+  var id = state.selected;
+  if(id == null) return Promise.resolve();
+  var room = state.rooms.filter(function(x){ return x.id === id; })[0];
+  if(!room) return Promise.resolve();
+  var jobs = [];
+  for(var e=0; e<room.next_epoch_to_settle; e++){
+    (function(ep){ jobs.push(rpc("get_epoch", {room_id:id, epoch:ep})); })(e);
+  }
+  return Promise.all(jobs).then(function(list){
+    state.epochsByRoom[id] = list.filter(function(x){ return x; });
+    if(renderAfter) renderAll();
+  });
+}
+
+function refresh(){
+  return rpc("list_rooms", {from_index:0, limit:50})
+    .then(function(rooms){
+      state.rooms = rooms || [];
+      if(state.selected == null && state.rooms.length) state.selected = state.rooms[0].id;
+      if(state.selected != null && !state.rooms.some(function(r){ return r.id===state.selected; }) && state.rooms.length) state.selected = state.rooms[0].id;
+      var jobs = state.rooms.map(function(r){ return rpc("current_epoch", {room_id:r.id}).catch(function(){ return null; }); });
+      return Promise.all(jobs).then(function(currents){
+        currents.forEach(function(c, i){ if(c) state.currentByRoom[state.rooms[i].id] = c; });
+        return loadSelectedRoom(false);
+      });
+    })
+    .then(function(){
+      state.lastOk = new Date();
+      renderAll();
+      setStatus(false);
+    })
+    .catch(function(err){
+      setStatus(true);
+    });
+}
+
+refresh();
+setInterval(refresh, REFRESH_MS);
+</script>
+</body>
+</html>
