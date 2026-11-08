@@ -4,6 +4,7 @@ __pycache__/
 contract/target/
 records/*
 !records/.gitkeep
+store-credentials/
 agents/logs/
 .env
 .env.*
