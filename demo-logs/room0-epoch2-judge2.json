@@ -1,0 +1,12 @@
+{
+  "room_id": 0,
+  "epoch": 2,
+  "agent": "judge2.bindingvow1106.testnet",
+  "decided_at": "2026-11-07T14:42:39Z",
+  "pool_observed": "16000000000000000000000",
+  "reserve_observed": "64000000000000000000000",
+  "others_last_epoch": [],
+  "strategy": "restrained",
+  "reasoning": "Take a small sip so the pool survives the season.",
+  "intended_amount": "2000000000000000000000"
+}
