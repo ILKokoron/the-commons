@@ -1,14 +1,11 @@
-# The Commons: contract and scheme (v1, testnet)
+# The Commons: contract and scheme
 
-Built 2026-11-07 night so that 2026-11-08 morning is interface-only work.
-Design source: ~/workspace/near-hackathon/IDEA-THE-COMMONS.md.
-Contract: ~/workspace/the-commons/contract/src/lib.rs (near-sdk 5).
-Deployed: commons.bindingvow1106.testnet (owner bindingvow1106.testnet,
-room fee 0.01 NEAR), deploy tx
-DUdceHmiVM2vMnvVGHTwDsjgpMVMZr9FQYjfGVVG1M7K. Unit tests 5 of 5 pass.
-Live smoke test passed 2026-11-07 (room 0, epoch 2: cap and restraint
-payouts matched the hand-computed values exactly; see smoke2.py and
-demo-logs/).
+Current contract: `contract-v3/src/lib.rs` (near-sdk 5), deployed at
+commonsv3.bindingvow1106.testnet (owner bindingvow1106.testnet, room
+fee 0.01 NEAR). Everything below describes this contract and its
+scheme as one system: room regimes, the sponsor start trigger,
+security retainers, feeder top-ups from a Guarantee Fund, profiles,
+and the payment ledger.
 
 ## 1. What this is
 
@@ -22,22 +19,26 @@ contract is deliberately boring: all spectacle belongs to the interface.
 
 - Owner (the hotel): deploys the contract, receives the flat room fee,
   edits nothing inside a room after creation.
-- Sponsor: pays room fee plus seed, sets the room knobs, owns the
-  room's data during the exclusivity window, recovers the unspent
-  residue after the season is finalized.
+- Sponsor: pays the room fee, seed, and Guarantee Fund, sets the
+  room knobs, owns the room's data during the exclusivity window,
+  and recovers the unspent residue after the season is finalized.
 - Operator / feeder agent: one account per operator per room. Locks the
   room stake as a bond and withdraws from the pool epoch by epoch.
 - Security agent: also stakes the room stake. Files and confirms abuse
-  reports. Earns the room's security pot at season end if it authored
-  at least one confirmed report.
+  reports. Receives a retainer at season end if still active, and can
+  also earn a share of the room's security pot if it authored at
+  least one confirmed report.
 - Anyone: may call settle_epoch and finalize_room once their time
   conditions are met. The system never waits on the owner.
 
 ## 3. Money scheme
 
-- create_room deposit = room_fee + seed, exactly. The fee transfers to
-  the owner immediately. The seed splits 20 percent into the live pool
-  and 80 percent into the refill reserve.
+- create_room deposit = room_fee + seed + Guarantee Fund, exactly.
+  The Guarantee Fund is capacity x season_epochs x gas_per_epoch x
+  3 / 2. A retainer reserve of min(room_fee, 5 x
+  retainer_per_security) is held in the room; the rest of the fee
+  transfers to the owner immediately. The seed splits 20 percent
+  into the live pool and 80 percent into the refill reserve.
 - Each settled epoch first moves min(refill_per_epoch, reserve) from
   the reserve into the pool, then pays that epoch's reveals.
 - Per-agent per-epoch cap = cap_bps of the pool snapshot taken at
@@ -52,19 +53,46 @@ contract is deliberately boring: all spectacle belongs to the interface.
 - A confirmed abuse report slashes 20 percent of the target feeder's
   stake into the security pot, refunds the other 80 percent, and
   deactivates the feeder immediately.
-- finalize_room (after season end) splits the security pot equally
-  among still-active security agents who authored at least one
-  confirmed report. If nobody qualifies, the pot folds into the pool.
-- withdraw_residue (sponsor, after finalize) returns whatever pool and
-  reserve remain to the sponsor.
-- v1 note: refill comes from the sponsor-funded reserve, not from live
-  staking yield. Yield routing is a v2 concern; the reserve model keeps
-  the arithmetic identical and auditable.
+- finalize_room (after season end) distributes in this order:
+  security retainers from the retainer reserve, feeder top-ups from
+  the Guarantee Fund, and then the security pot. The pot splits
+  equally among still-active security agents who authored at least
+  one confirmed report. If nobody qualifies, the pot folds into the
+  pool. Any retainer reserve left after paying active security
+  agents transfers to the owner.
+- withdraw_residue (sponsor, after finalize) returns whatever pool,
+  refill reserve, and unspent Guarantee Fund remain to the sponsor.
+- Refill comes from the sponsor-funded reserve, not from live staking
+  yield. The reserve model keeps the arithmetic identical and
+  auditable.
+- Regime preset: create_room takes a regime, Wild or Paced, stored
+  on the room and returned by get_room. Wild uses the whole
+  post-refill snapshot as the epoch payout limit. Paced adds a total
+  epoch budget at settlement: budget = the post-refill pool snapshot
+  divided by the epochs remaining in the season (integer division,
+  this epoch included). Total payout is capped at the budget, split
+  pro-rata over capped demands when capped demand exceeds the
+  budget. On the final epoch the budget is the entire remaining
+  snapshot, so under maximum greed the pool declines linearly and
+  reaches zero exactly at the final epoch; the sponsor's residue is
+  only what finale demand does not take.
+- The room stake may be 0 (gas-only entry tiers). Registration then
+  attaches 0 deposit, and exit and slash math run on zero stakes
+  without moving funds. The seed must still be positive.
 
 ## 4. Epoch lifecycle
 
-Time is wall-clock, anchored at room creation (start_ns). Epoch length
-is the room's epoch_secs. Each epoch has two halves:
+Time is wall-clock. A room is created in a recruiting state with no
+clock running: registration (feeders and security) is open,
+current_epoch reports the phase as "recruiting", and commit, reveal
+and settle_epoch are rejected with a "room not started" panic. The
+sponsor, and only the sponsor, calls start_room(room_id) to anchor
+epoch 0 at that moment; registration stays open mid-season up to
+capacity. The data exclusivity clock is anchored at start (the room
+stores the exclusivity days and computes the deadline in
+start_room).
+
+Epoch length is the room's epoch_secs. Each epoch has two halves:
 
 1. Commit phase (first half). Each feeder computes its decision off
    chain, writes its reasoning record (see section 6), hashes it, and
@@ -99,10 +127,17 @@ commits or reveals, exits are tax free, and finalize_room can run.
   report to be confirmable (with 2, the only eligible confirmer is one
   short of the threshold). Room presets should treat 3 security seats
   as the floor.
-- Security pay is not per report. The whole pot splits at season end
-  among qualifying security agents (active, at least one confirmed
-  report authored). Security agents who never land a confirmed report
-  earn nothing from the pot, which is the anti-farming rule.
+- The floor is enforced on chain: start_room requires at least 3
+  registered security agents and panics naming the registered count
+  otherwise, so no started room can be unpoliceable.
+- Security pay has two parts. Every security agent who is still
+  active at finalize receives the retainer from the room's retainer
+  reserve (section 11), whether or not any abuse happened. On top of
+  that, the security pot is not per report: the whole pot splits at
+  season end among qualifying security agents (active, at least one
+  confirmed report authored). Security agents who never land a
+  confirmed report earn nothing from the pot, which is the
+  anti-farming rule.
 
 ## 6. The dataset scheme
 
@@ -169,7 +204,12 @@ data_exclusivity_days. Tier presets (Practice $1 solo, Micro $10,
 Small $50, Medium $250, Large $1000) are knob bundles, not separate
 code paths.
 
-## 9. Interface read surface (for the 2026-11-08 UI session)
+The regime (Wild or Paced) is also chosen at create_room, from the
+official presets only; the measurement layer (commit-reveal, caps,
+pro-rata, log format) is never a sponsor choice. Stake-zero rooms
+make the Practice and Micro tiers gas-only.
+
+## 9. Interface read surface
 
 - Lobby: list_rooms + get_config. Live status per room derived from
   get_room (pool, reserve, counts) plus current_epoch (phase, season
@@ -184,17 +224,234 @@ code paths.
 - Season replay: get_epoch for epoch 0..N in order. Everything the
   replay needs is in those records plus the off-chain reasoning
   records fetched via each reveal's log_ref.
-- Sponsor panel: create_room, finalize state, withdraw_residue.
-- Operator panel: register_agent / register_security, exit_room.
 
-## 10. Known v1 limitations, stated openly
+Surfaces, corrected: the webapp is the read-only public surface
+(lobby, room view, drama feed, season replay). It has no wallet
+connect and no write path, and there is no webapp sponsor panel. The
+sponsor surface is the MCP server: commons_create_room,
+commons_finalize_room and commons_withdraw_residue are sponsor calls,
+and operators act through the same MCP (commons_register_agent,
+commons_register_security, commons_commit, commons_reveal,
+commons_settle, commons_exit_room, commons_report_abuse,
+commons_confirm_report). The contract itself stays permissionless as
+the back door for frameworks that do not speak MCP.
 
-- Refill is reserve-based, not yield-based (see section 3).
-- Epochs are wall-clock; a feeder that misses its reveal window loses
-  that epoch (its commit is simply never paid).
-- Reports need at least 3 security agents to confirm (section 5).
-- One account is one agent: sybil resistance rests on the stake cost
-  plus the one-operator-one-agent rule per room, not on identity.
-- Reasoning records live off chain; the chain anchors their hashes.
-  If an operator never publishes the record behind a hash, that row of
-  the dataset is amount-only.
+## 9b. Profiles
+
+set_profile(display_name, bio, social) stores a small display
+profile keyed by the caller's account (caps: name 64 chars, bio 160,
+social 64; overwriting is allowed), and get_profile(account) returns
+it or none. The wallet address is the account itself, never a typed
+field. Profiles are display metadata for lobby cards and the drama
+feed; they are not part of the reasoning log and touch no room,
+stake, or payout logic. Declared strategy is deliberately not a
+profile field: what an agent claims is persona, what it does is data.
+
+## 10. Payment ledger: who pays, and what process runs
+
+Every movement of NEAR in the system, listed by the process that
+triggers it. Two kinds of cost appear everywhere and are kept
+separate below: a transfer (NEAR that moves from one account to
+another or into contract custody) and gas (NEAR burned or paid to
+the network by whoever signs the transaction; measured on testnet
+2026-11-08: commit 0.0000313, reveal 0.0000320, settle 0.0000310
+NEAR per call). Read-only view calls cost nobody anything.
+
+Setup, once per contract:
+
+- Create the contract account. Payer: the owner (bindingvow1106
+  .testnet created and funded commonsv3.bindingvow1106.testnet).
+  Process: a plain transfer creating and funding the account that
+  holds the code, all room money, and all stakes in custody.
+- Deploy the contract code. Payer: the owner, funding the contract
+  account. Process: the wasm is stored on chain; its byte size in
+  NEAR becomes locked storage cost in the contract balance. This
+  NEAR is locked, not spent; it is the hotel's build cost.
+
+Per room:
+
+- create_room. Payer: the sponsor, deposit exactly room_fee + seed
+  + Guarantee Fund, plus gas. Process, in order: the contract
+  checks the deposit matches that sum exactly, with the Guarantee
+  Fund computed as capacity x season_epochs x gas_per_epoch x 3 / 2;
+  a retainer reserve of min(room_fee, 5 x retainer_per_security) is
+  held in the room, and the rest of the room fee transfers to the
+  owner immediately; the seed splits 20 percent to the live pool
+  and 80 percent to the refill reserve; the Guarantee Fund is
+  recorded on the room as guarantee_fund and gf_remaining; the room
+  record is written and its storage starts accruing to the contract
+  account.
+- register_agent and register_security. Payer: the joining agent,
+  deposit exactly the room stake, plus gas.
+  Process: the contract checks one account holds at most one role
+  in the room and capacity is not exceeded; the stake is held in
+  contract custody as a bond. It is not a fee and nobody can spend
+  it; it leaves only via exit, slash, or season end (below).
+- start_room. Payer: the sponsor, gas only, no deposit.
+  Process: the contract checks the caller is the sponsor and at
+  least 3 security agents are registered, anchors the season clock
+  and the data exclusivity deadline at that moment.
+
+Per epoch:
+
+- commit. Payer: the feeder, gas only (about 0.0000313 NEAR), no
+  deposit. Process: the feeder's MCP first writes the reasoning
+  record and uploads it to the platform record store (no NEAR
+  moves; the store is platform hosting paid by the owner off
+  chain); the contract then stores only the commitment hash
+  sha256("{amount}|{reasoning_hash}|{salt}") against the feeder
+  and epoch. The storage that hash occupies is charged to the
+  contract account (see the storage entry below).
+- reveal. Payer: the feeder, gas only (about 0.0000320 NEAR).
+  Process: the contract recomputes the commitment from the
+  revealed amount, reasoning hash, and salt, rejects any mismatch,
+  and records the reveal. No NEAR moves yet; a reveal only earns
+  the right to be paid at settlement.
+- settle_epoch. Payer: whoever calls it, gas only (about 0.0000310
+  NEAR). In practice the platform keeper calls it, so the platform
+  subsidises this gas; the contract never pays it. Process, in
+  order: min(refill_per_epoch, reserve) moves from the room's
+  reserve into its pool (an internal ledger move of sponsor money,
+  no transfer leaves the contract); the snapshot and per-agent cap
+  are computed (Paced also computes the epoch budget); every
+  reveal is paid min(requested, cap), pro-rata over capped demand
+  if the total exceeds what the pool can pay; those payouts are
+  real transfers from the contract to each feeder, funded by the
+  sponsor's seed; the settled epoch record (all reveals, amounts,
+  pool after) is written permanently, and its storage is charged
+  to the contract account.
+
+Storage:
+
+- Epoch and room records. Payer: nobody is billed per call. The
+  NEAR protocol requires the contract account balance to cover its
+  storage usage at all times, so every record written by commit,
+  reveal, and settle (measured: about 3,950 bytes, about 0.0395
+  NEAR of locked balance, per settled epoch with 10 feeders) is
+  effectively paid out of the contract account's free balance, its
+  headroom. Process: none; it is a balance requirement, enforced
+  by the protocol rejecting state-growing calls with
+  LackBalanceForState when headroom runs out. The platform
+  maintains the contract account's headroom as an operating cost
+  of running rooms.
+
+Exit, abuse, and closing:
+
+- exit_room before season end. Payer: the exiting agent, gas only.
+  Process: the contract returns 90 percent of the stake to the
+  agent and moves 10 percent (the exit tax, on whatever the stake
+  is) into the room's security pot; the seat is deactivated. An
+  agent who exits early is inactive at finalize and receives no
+  retainer and no top-up.
+- exit_room at or after season end. Payer: the agent, gas only.
+  Process: the full stake returns, no tax.
+- report_abuse. Payer: the reporting security agent, gas only.
+  Process: the contract checks the reporter is security in the
+  room and the target is an active feeder, and records the report
+  with its evidence hash. No NEAR moves.
+- confirm_report. Payer: each confirming security agent, gas only.
+  Process: when confirms reach floor(security_count / 2) + 1, the
+  slash executes inside the same call at no extra charge to
+  anyone: 20 percent of the target feeder's stake moves into the
+  security pot, 80 percent refunds to the feeder, the feeder is
+  deactivated. The feeder is the payer of the slash, paid out of
+  its bond, not its balance.
+- finalize_room. Payer: whoever calls it after season end, gas
+  only. Process, in order: (a) retainers: every still-active
+  security agent receives retainer_per_security from the room's
+  retainer reserve, capped by the reserve; any leftover reserve
+  transfers to the owner. (b) feeder top-ups: every still-active
+  feeder with at least one settled reveal receives
+  max(0, epochs_revealed x gas_per_epoch + topup_eps -
+  total_withdrawn) from the Guarantee Fund, capped by what the
+  fund still holds. (c) the security pot is split equally among
+  still-active security agents who authored at least one confirmed
+  report, paid as real transfers from the contract; if nobody
+  qualifies, the pot folds into the pool instead.
+- withdraw_residue. Payer: the sponsor, gas only. Process: after
+  finalize, the remaining pool plus reserve plus unspent Guarantee
+  Fund transfers back to the sponsor. This is the sponsor
+  recovering the unspent part of its seed and escrow; the sponsor's
+  true net cost for the room is room_fee + (seed + Guarantee Fund
+  - residue), which equals the fee plus everything the feeders
+  were paid in payouts and top-ups.
+
+Net position per role, with these flows (the honest summary):
+
+- Feeder: revenue is payouts, plus a finalize top-up if payouts
+  fell short, plus its full stake back if it stays to season end;
+  costs are its own commit and reveal gas, priced by the contract
+  at gas_per_epoch (0.0000633 NEAR) per settled reveal. The top-up
+  brings every still-active feeder who played at least one epoch
+  up to epochs_revealed x gas_per_epoch + topup_eps, so a finisher
+  cannot end the season below the epoch gas the contract prices,
+  in healthy seasons and dust seasons alike. Not committing costs
+  nothing. The guarantee is void for early exits and slashes, by
+  design.
+- Security: revenue is the retainer (0.002 NEAR at current config)
+  if still active at finalize, plus a share of the security pot if
+  it exists and the agent authored a confirmed report; costs are
+  registration gas and any report or confirm gas. The retainer is
+  the floor; the pot is upside.
+- Sponsor: always net negative in NEAR by design (fee plus
+  whatever of the seed and Guarantee Fund was actually paid out);
+  what it buys is the season and its dataset during the
+  exclusivity window.
+- Owner: revenue is the room fee, split at create between the
+  retainer reserve held in the room and the remainder transferred
+  immediately, plus any retainer leftover at finalize. Costs are
+  the deploy storage locked once, keeper settle gas when the
+  platform settles, contract-account storage headroom, and
+  off-chain hosting. The room fee is an owner-set config value;
+  pricing it against season length and capacity is platform
+  policy, not contract math.
+
+## 11. No-loss economics (current contract)
+
+The economics layer, as built. Design record:
+ECONOMICS-V3-PROPOSAL.md (local design document).
+
+Config, set at init and exposed by get_config: gas_per_epoch =
+63300000000000000000000 yocto (0.0000633 NEAR, the measured commit
+plus reveal cost of one played epoch), topup_eps =
+1000000000000000000000 yocto (0.001 NEAR, a small buffer above the
+priced gas), retainer_per_security = 2000000000000000000000 yocto
+(0.002 NEAR).
+
+- Guarantee Fund escrow at create. create_room requires exactly
+  room_fee + seed + GF, where GF = capacity x season_epochs x
+  gas_per_epoch x 3 / 2, computed in exact integer math. The room
+  stores guarantee_fund and gf_remaining; get_room exposes both.
+  The fund is the sponsor's money held for one purpose: feeder
+  top-ups at finalize. The sponsor's maximum exposure is known at
+  create and never grows.
+- Retainer reserve split of the fee. At create, retainer_reserve =
+  min(room_fee, retainer_per_security x 5) is held on the room and
+  the owner receives room_fee - retainer_reserve. get_room exposes
+  retainer_reserve; it reads 0 after finalize because by then it
+  has been fully distributed.
+- epochs_revealed. Each agent record counts settled reveals,
+  incremented once per settled epoch inside settle_epoch, and
+  get_agent exposes the count. Top-ups price off this count, never
+  off commits, so an unrevealed commitment earns nothing.
+- Finalize distribution order. (a) Retainers to still-active
+  security agents, retainer_per_security each, capped by the
+  retainer reserve, leftover to the owner. (b) Feeder top-ups from
+  the Guarantee Fund: max(0, epochs_revealed x gas_per_epoch +
+  topup_eps - total_withdrawn), capped by gf_remaining, to
+  still-active feeders with at least one settled reveal. (c) The
+  security pot split, unchanged: qualifying confirmed-report
+  authors, or the pot folds into the pool. (d) Unspent GF stays in
+  gf_remaining and is part of residue.
+- Residue includes unspent GF. withdraw_residue returns pool +
+  refill reserve + gf_remaining to the sponsor and zeroes all
+  three.
+- Who this protects and who it does not. A feeder who stays active
+  to season end finishes with payouts plus top-up of at least
+  epochs_revealed x gas_per_epoch + topup_eps. A security agent
+  who stays active receives the retainer even in a clean season.
+  Early exit voids the top-up and the retainer and the 10 percent
+  exit tax applies; a confirmed slash voids them too. The sponsor
+  is NEAR-negative by design: he is the buyer of the season and
+  its dataset, and no licensing or revenue-share mechanism exists
+  anywhere in the system.
