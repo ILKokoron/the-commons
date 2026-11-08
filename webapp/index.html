@@ -69,6 +69,14 @@
   .feed li{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
     padding:10px 14px;margin-bottom:8px;font-size:14px;line-height:1.45}
   .feed li .when{color:var(--muted);font-size:12px;letter-spacing:1px;text-transform:uppercase}
+  .replay-open{font-size:13px;padding:6px 14px;background:var(--panel);border:1px solid var(--line);cursor:pointer;color:var(--ink)}
+  .replay-open:hover{border-color:var(--accent)}
+  .replay-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+  .replay-bar button{font-size:13px;padding:6px 14px;background:var(--panel);border:1px solid var(--line);cursor:pointer;color:var(--ink)}
+  .replay-bar button:hover{border-color:var(--accent)}
+  .replay-bar button:disabled{opacity:.45;cursor:default}
+  .replay-bar input[type=range]{flex:1;min-width:140px;accent-color:var(--accent)}
+  .replay-epoch{font-size:15px;font-weight:700;letter-spacing:1px;white-space:nowrap}
   footer{border-top:1px solid var(--line);padding:16px 20px 30px;text-align:center;color:var(--muted);font-size:12px}
   @media (max-width:560px){ header h1{font-size:24px;letter-spacing:3px} }
 </style>
@@ -92,6 +100,9 @@
   <h2>Settled epochs</h2>
   <div id="epochs"><div class="empty">No settled epochs loaded yet.</div></div>
 
+  <h2>Season replay</h2>
+  <div id="replay"><div class="empty">Replay opens for finished rooms.</div></div>
+
   <h2>Drama feed</h2>
   <ul class="feed" id="feed"><li class="when">Nothing yet.</li></ul>
 </main>
@@ -104,7 +115,8 @@ var CONTRACT = "commons.bindingvow1106.testnet";
 var REFRESH_MS = 18000;
 var YOCTO = 1000000000000000000000000n;
 
-var state = { rooms: [], epochsByRoom: {}, currentByRoom: {}, selected: null, lastOk: null };
+var state = { rooms: [], epochsByRoom: {}, currentByRoom: {}, epochState: {}, selected: null, lastOk: null,
+  replay: { roomId: null, epoch: 0, playing: false, timer: null, sig: "" } };
 
 function b64(obj){
   return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
@@ -131,6 +143,17 @@ function rpc(fn, args){
     return new Promise(function(res){ setTimeout(res, 900); }).then(function(){ return rpcOnce(fn, args); });
   });
 }
+function rpcRetry(fn, args, attempts){
+  var delays = [700, 1600, 3200, 6000];
+  function go(n){
+    return rpcOnce(fn, args).catch(function(e){
+      if(n >= attempts) throw e;
+      var d = delays[Math.min(n - 1, delays.length - 1)];
+      return new Promise(function(res){ setTimeout(res, d); }).then(function(){ return go(n + 1); });
+    });
+  }
+  return go(1);
+}
 function fmtNear(yoctoStr){
   try{
     var v = BigInt(yoctoStr);
@@ -156,6 +179,199 @@ function seasonAlive(room){
   if(room.ended) return false;
   if(cur && cur.season_over) return false;
   return true;
+}
+
+function roomFinished(room){
+  if(!room) return false;
+  if(room.ended) return true;
+  if(room.next_epoch_to_settle >= room.season_epochs) return true;
+  var cur = state.currentByRoom[room.id];
+  if(cur && cur.season_over) return true;
+  return false;
+}
+
+function seedOf(room){
+  var eps = state.epochsByRoom[room.id] || [];
+  var e0 = null;
+  eps.forEach(function(e){ if(e.epoch === 0) e0 = e; });
+  if(e0){
+    var startPool = big(e0.pool_after) - big(e0.refill_moved) + big(e0.total_paid);
+    if(startPool > 0n) return startPool * 5n;
+  }
+  return big(room.pool_balance) + big(room.refill_reserve) + big(room.total_paid_out);
+}
+function failedEpochList(room){
+  var st = state.epochState[room.id];
+  if(!st) return [];
+  return Object.keys(st.failed).map(function(k){ return Number(k); }).sort(function(a,b){ return a - b; });
+}
+
+function replaySeries(room){
+  var loaded = state.epochsByRoom[room.id] || [];
+  var byEpoch = {};
+  loaded.forEach(function(e){ byEpoch[e.epoch] = e; });
+  var startPool = null;
+  if(byEpoch[0]) startPool = big(byEpoch[0].pool_after) - big(byEpoch[0].refill_moved) + big(byEpoch[0].total_paid);
+  var series = [];
+  var prev = startPool;
+  for(var i=0;i<room.season_epochs;i++){
+    var rec = byEpoch[i];
+    if(rec){
+      series.push(rec);
+      prev = big(rec.pool_after);
+    } else {
+      var pa = (prev === null ? null : prev + big(room.refill_per_epoch));
+      series.push({epoch:i, total_requested:"0", total_paid:"0",
+        refill_moved: room.refill_per_epoch,
+        pool_after: pa === null ? "0" : pa.toString(), reveals:[], missing:true});
+      prev = pa;
+    }
+  }
+  if(startPool === null) startPool = big(room.pool_balance) + big(room.refill_reserve);
+  return { series: series, startPool: startPool };
+}
+
+function replayDramaLine(e){
+  var reveals = e.reveals || [];
+  if(!reveals.length){
+    return "Epoch " + e.epoch + " settled empty. Nobody fed; only the refill moved.";
+  }
+  var parts = [];
+  reveals.forEach(function(rv){
+    var amount = big(rv.amount), paid = big(rv.paid);
+    if(amount === 0n){
+      parts.push(esc(shortAcct(rv.account)) + " revealed 0. Public restraint.");
+    } else if(paid < amount){
+      parts.push(esc(shortAcct(rv.account)) + " asked " + fmtNear(rv.amount) + ", capped at " + fmtNear(rv.paid) + ".");
+    } else {
+      parts.push(esc(shortAcct(rv.account)) + " asked " + fmtNear(rv.amount) + " and was paid in full.");
+    }
+  });
+  return parts.join(" ");
+}
+
+function stopReplayPlay(){
+  state.replay.playing = false;
+  if(state.replay.timer){ clearInterval(state.replay.timer); state.replay.timer = null; }
+  var pb = document.getElementById("rpl-play");
+  if(pb) pb.textContent = "Play";
+}
+
+function replayStep(d){
+  var r = state.rooms.filter(function(x){ return x.id === state.selected; })[0];
+  if(!r || !roomFinished(r)) return;
+  stopReplayPlay();
+  state.replay.epoch = Math.max(0, Math.min(r.season_epochs - 1, state.replay.epoch + d));
+  renderReplayBody();
+}
+
+function toggleReplayPlay(){
+  var r = state.rooms.filter(function(x){ return x.id === state.selected; })[0];
+  if(!r || !roomFinished(r)) return;
+  if(state.replay.playing){ stopReplayPlay(); return; }
+  if(state.replay.epoch >= r.season_epochs - 1) state.replay.epoch = 0;
+  state.replay.playing = true;
+  var pb = document.getElementById("rpl-play");
+  if(pb) pb.textContent = "Pause";
+  renderReplayBody();
+  state.replay.timer = setInterval(function(){
+    if(state.replay.epoch >= r.season_epochs - 1){ stopReplayPlay(); return; }
+    state.replay.epoch += 1;
+    renderReplayBody();
+    if(state.replay.epoch >= r.season_epochs - 1) stopReplayPlay();
+  }, 1600);
+}
+
+function renderReplay(){
+  var el = document.getElementById("replay");
+  var r = state.rooms.filter(function(x){ return x.id === state.selected; })[0];
+  if(!r){ el.innerHTML = '<div class="empty">Select a room.</div>'; state.replay.sig = ""; return; }
+  if(!roomFinished(r)){
+    stopReplayPlay();
+    state.replay.roomId = r.id;
+    state.replay.sig = "live|" + r.id;
+    el.innerHTML = '<div class="card"><div class="empty" style="padding:2px 0">Room ' + r.id + ' · ' + esc(r.name || "") + ' is still live. Its replay opens when the season ends.</div></div>';
+    return;
+  }
+  if(state.replay.roomId !== r.id){
+    stopReplayPlay();
+    state.replay.roomId = r.id;
+    state.replay.epoch = 0;
+    state.replay.sig = "";
+  }
+  var sig = "fin|" + r.id + "|" + r.season_epochs;
+  if(state.replay.sig !== sig){
+    state.replay.sig = sig;
+    el.innerHTML =
+        '<div class="card">'
+      + '<div class="replay-bar sans">'
+      + '<button id="rpl-prev" type="button">&lsaquo; Prev</button>'
+      + '<input type="range" id="rpl-slider" min="0" max="' + (r.season_epochs - 1) + '" step="1" value="' + state.replay.epoch + '">'
+      + '<button id="rpl-next" type="button">Next &rsaquo;</button>'
+      + '<button id="rpl-play" type="button">Play</button>'
+      + '<span class="replay-epoch" id="rpl-label"></span>'
+      + '</div>'
+      + '<div id="rpl-body"></div>'
+      + '</div>';
+    document.getElementById("rpl-prev").addEventListener("click", function(){ replayStep(-1); });
+    document.getElementById("rpl-next").addEventListener("click", function(){ replayStep(1); });
+    document.getElementById("rpl-play").addEventListener("click", function(){ toggleReplayPlay(); });
+    document.getElementById("rpl-slider").addEventListener("input", function(ev){
+      stopReplayPlay();
+      state.replay.epoch = Number(ev.target.value);
+      renderReplayBody();
+    });
+  }
+  renderReplayBody();
+}
+
+function renderReplayBody(){
+  var body = document.getElementById("rpl-body");
+  if(!body) return;
+  var r = state.rooms.filter(function(x){ return x.id === state.selected; })[0];
+  if(!r || !roomFinished(r)) return;
+  var data = replaySeries(r);
+  var e = data.series[state.replay.epoch];
+  if(!e) return;
+  var poolAfter = big(e.pool_after);
+  var snapshot = poolAfter + big(e.total_paid);
+  var seed = seedOf(r);
+  var pct = seed > 0n ? Number(poolAfter * 10000n / seed) / 100 : 0;
+  var fillPct = Math.max(0, Math.min(100, pct));
+  var label = document.getElementById("rpl-label");
+  if(label) label.textContent = "Epoch " + e.epoch + " of " + r.season_epochs;
+  var slider = document.getElementById("rpl-slider");
+  if(slider && Number(slider.value) !== state.replay.epoch) slider.value = state.replay.epoch;
+  var prevBtn = document.getElementById("rpl-prev");
+  if(prevBtn) prevBtn.disabled = state.replay.epoch <= 0;
+  var nextBtn = document.getElementById("rpl-next");
+  if(nextBtn) nextBtn.disabled = state.replay.epoch >= r.season_epochs - 1;
+  var reveals = e.reveals || [];
+  var rows;
+  if(!reveals.length){
+    rows = '<tr><td class="agent" style="color:var(--muted)">No reveals</td><td class="num">0</td><td class="num">0</td></tr>';
+  } else {
+    rows = reveals.map(function(rv){
+      return '<tr><td class="agent" title="' + esc(rv.account) + '">' + esc(shortAcct(rv.account)) + '</td>'
+        + '<td class="num">' + fmtNear(rv.amount) + '</td><td class="num">' + fmtNear(rv.paid) + '</td></tr>';
+    }).join("");
+  }
+  var missingNote = e.missing
+    ? '<div class="empty" style="padding:2px 0 10px">This epoch\'s record has not loaded yet (still loading, or the chain mirror dropped it). The figures below assume only the refill moved and will correct when the record loads.</div>'
+    : "";
+  body.innerHTML = missingNote +
+      '<div class="tank-wrap"><div class="tank"><div class="fill' + (pct < 20 ? " low":"") + '" style="width:' + fillPct + '%"></div></div>'
+    + '<div class="tank-labels"><span>Pool after epoch <b>' + fmtNear(e.pool_after) + ' NEAR</b></span>'
+    + '<span style="color:var(--muted)">' + pct.toFixed(1) + '% of seed (' + fmtNear(seed.toString()) + ' NEAR)</span></div></div>'
+    + '<div class="facts">'
+    + '<div class="kv"><span>Snapshot at settle</span><b>' + fmtNear(snapshot.toString()) + ' NEAR</b></div>'
+    + '<div class="kv"><span>Refill moved</span><b>' + fmtNear(e.refill_moved) + ' NEAR</b></div>'
+    + '<div class="kv"><span>Total requested</span><b>' + fmtNear(e.total_requested) + ' NEAR</b></div>'
+    + '<div class="kv"><span>Total paid</span><b>' + fmtNear(e.total_paid) + ' NEAR</b></div>'
+    + '</div>'
+    + '<ul class="feed" style="margin-top:14px"><li><span class="when">Epoch ' + e.epoch + '</span><br>' + replayDramaLine(e) + '</li></ul>'
+    + '<div style="overflow-x:auto;margin-top:6px"><table><thead><tr><th>Agent</th><th class="num">Requested NEAR</th><th class="num">Paid NEAR</th></tr></thead><tbody>'
+    + rows + '</tbody></table></div>';
 }
 
 function renderLobby(){
@@ -199,21 +415,25 @@ function renderRoom(){
   var el = document.getElementById("roomview");
   var r = state.rooms.filter(function(x){ return x.id === state.selected; })[0];
   if(!r){ el.innerHTML = '<div class="empty">Select a room.</div>'; return; }
-  var epochs = state.epochsByRoom[r.id] || [];
-  var maxPool = big(r.pool_balance) + big(r.refill_reserve);
-  epochs.forEach(function(e){ var p = big(e.pool_after); if(p > maxPool) maxPool = p; });
+  var seed = seedOf(r);
   var pool = big(r.pool_balance);
-  var pct = maxPool > 0n ? Number(pool * 10000n / maxPool) / 100 : 0;
+  var pct = seed > 0n ? Number(pool * 10000n / seed) / 100 : 0;
   if(pct > 100) pct = 100;
+  if(pct < 0) pct = 0;
   var cur = state.currentByRoom[r.id];
   var alive = seasonAlive(r);
-  var phaseLine = cur ? ('Phase ' + esc(cur.phase) + ' · Epoch ' + cur.epoch + ' of ' + r.season_epochs) : "";
+  var phaseLine = "";
+  if(roomFinished(r)){
+    phaseLine = 'Epoch ' + r.season_epochs + ' of ' + r.season_epochs;
+  } else if(cur){
+    phaseLine = 'Phase ' + esc(cur.phase) + ' · Epoch ' + Math.min(cur.epoch, r.season_epochs) + ' of ' + r.season_epochs;
+  }
   el.innerHTML =
       '<div style="font-size:22px;font-weight:700">' + esc(r.name || ("Room "+r.id)) + '</div>'
     + '<div class="sans" style="color:var(--muted);font-size:13px;margin-top:2px">Room ' + r.id + ' · Sponsor ' + esc(r.sponsor) + ' · ' + (alive ? "Season alive" : "Season ended") + (phaseLine ? ' · ' + phaseLine : "") + '</div>'
     + '<div class="tank-wrap"><div class="tank"><div class="fill' + (pct < 20 ? " low":"") + '" style="width:' + pct + '%"></div></div>'
     + '<div class="tank-labels"><span>Pool <b>' + fmtNear(r.pool_balance) + ' NEAR</b></span>'
-    + '<span style="color:var(--muted)">' + pct.toFixed(1) + '% of ' + fmtNear(maxPool.toString()) + ' NEAR (pool plus reserve, or highest settled pool)</span></div></div>'
+    + '<span style="color:var(--muted)">' + pct.toFixed(1) + '% of seed (' + fmtNear(seed.toString()) + ' NEAR)</span></div></div>'
     + '<div class="facts">'
     + '<div class="kv"><span>Refill per epoch</span><b>' + fmtNear(r.refill_per_epoch) + ' NEAR</b></div>'
     + '<div class="kv"><span>Refill reserve</span><b>' + fmtNear(r.refill_reserve) + ' NEAR</b></div>'
@@ -226,13 +446,36 @@ function renderRoom(){
     + '<div class="kv"><span>Settled epochs</span><b>' + r.next_epoch_to_settle + '</b></div>'
     + '<div class="kv"><span>Feeders</span><b>' + r.feeders_count + ' / ' + r.capacity + '</b></div>'
     + '<div class="kv"><span>Security agents</span><b>' + r.security_count + '</b></div>'
-    + '</div>';
+    + '</div>'
+    + (roomFinished(r) ? '<div style="margin-top:14px"><button class="replay-open sans" id="replay-open" type="button">Replay this season</button></div>' : "");
+  var rb = document.getElementById("replay-open");
+  if(rb) rb.addEventListener("click", function(){
+    stopReplayPlay();
+    state.replay.roomId = r.id;
+    state.replay.epoch = 0;
+    state.replay.sig = "";
+    renderReplay();
+    document.getElementById("replay").scrollIntoView({behavior:"smooth", block:"start"});
+  });
 }
 
 function renderEpochs(){
   var el = document.getElementById("epochs");
-  var epochs = (state.selected == null ? [] : (state.epochsByRoom[state.selected] || []));
-  if(!epochs.length){ el.innerHTML = '<div class="empty">No settled epochs for this room yet.</div>'; return; }
+  var room = state.rooms.filter(function(x){ return x.id === state.selected; })[0];
+  if(!room){ el.innerHTML = '<div class="empty">Select a room.</div>'; return; }
+  var epochs = state.epochsByRoom[room.id] || [];
+  var expected = room.next_epoch_to_settle;
+  var st = state.epochState[room.id] || { failed: {}, loading: false };
+  var failed = failedEpochList(room);
+  if(expected === 0){ el.innerHTML = '<div class="empty">No settled epochs for this room yet.</div>'; return; }
+  if(!epochs.length){
+    if(st.loading && !failed.length){
+      el.innerHTML = '<div class="empty">Loading settled epochs…</div>';
+    } else {
+      el.innerHTML = '<div class="empty">Could not load epoch records for this room. The chain mirror is busy; retrying on the next refresh.</div>';
+    }
+    return;
+  }
   var rows = "";
   epochs.forEach(function(e){
     var reveals = e.reveals || [];
@@ -250,10 +493,17 @@ function renderEpochs(){
         + '<td class="num">' + (i===0 ? fmtNear(e.pool_after) : "") + '</td></tr>';
     });
   });
+  var notice = "";
+  if(failed.length){
+    notice = '<div class="empty" style="padding:10px 4px 0">Epoch records for epoch' + (failed.length > 1 ? "s " : " ") + failed.join(", ")
+      + ' could not be loaded (chain mirror busy). Showing the ' + epochs.length + ' that loaded; retrying on the next refresh.</div>';
+  } else if(st.loading || epochs.length < expected){
+    notice = '<div class="empty" style="padding:10px 4px 0">Loading the remaining epoch records…</div>';
+  }
   el.innerHTML = '<div style="overflow-x:auto"><table><thead><tr>'
     + '<th>Epoch</th><th>Agent</th><th class="num">Requested NEAR</th><th class="num">Paid NEAR</th>'
     + '<th class="num">Epoch paid NEAR</th><th class="num">Pool after NEAR</th></tr></thead><tbody>'
-    + rows + '</tbody></table></div>';
+    + rows + '</tbody></table></div>' + notice;
 }
 
 function buildDrama(room, epochs){
@@ -261,12 +511,15 @@ function buildDrama(room, epochs){
   var prevPool = null;
   epochs.forEach(function(e){
     var poolAfter = big(e.pool_after);
+    if(!(e.reveals && e.reveals.length)){
+      items.push({epoch:e.epoch, text: "Epoch " + e.epoch + " settled in silence. No feeder revealed; only the refill moved."});
+    }
     (e.reveals || []).forEach(function(rv){
       var amount = big(rv.amount), paid = big(rv.paid);
       if(amount === 0n){
         items.push({epoch:e.epoch, text: esc(shortAcct(rv.account)) + " revealed 0 in epoch " + e.epoch + ". Public restraint."});
       } else if(paid < amount){
-        items.push({epoch:e.epoch, text: esc(shortAcct(rv.account)) + " asked for " + fmtNear(rv.amount) + " NEAR in epoch " + e.epoch + " and received " + fmtNear(rv.paid) + " NEAR. Capped by the cap."});
+        items.push({epoch:e.epoch, text: esc(shortAcct(rv.account)) + " asked " + fmtNear(rv.amount) + " NEAR in epoch " + e.epoch + ", capped at " + fmtNear(rv.paid) + " NEAR."});
       }
     });
     if(prevPool !== null && prevPool > 0n && poolAfter * 4n < prevPool * 3n){
@@ -292,15 +545,33 @@ function buildDrama(room, epochs){
 function renderFeed(){
   var el = document.getElementById("feed");
   var room = state.rooms.filter(function(x){ return x.id === state.selected; })[0];
-  var epochs = (state.selected == null ? [] : (state.epochsByRoom[state.selected] || []));
+  var epochs = room ? (state.epochsByRoom[room.id] || []) : [];
   var items = room ? buildDrama(room, epochs) : [];
-  if(!items.length){ el.innerHTML = '<li><span class="when">Quiet so far</span><br>No capped withdrawals, sharp drops, or acts of restraint in the settled epochs yet.</li>'; return; }
-  el.innerHTML = items.map(function(it){
+  var failed = room ? failedEpochList(room) : [];
+  var st = room ? (state.epochState[room.id] || { failed: {}, loading: false }) : { failed: {}, loading: false };
+  if(!items.length){
+    if(room && failed.length){
+      el.innerHTML = '<li><span class="when">Partial</span><br>Some epoch records could not be loaded, so this feed cannot be judged yet. Retrying on the next refresh.</li>';
+    } else if(room && room.next_epoch_to_settle > 0 && !epochs.length){
+      el.innerHTML = st.loading
+        ? '<li><span class="when">Loading</span><br>Reading settled epochs from the chain…</li>'
+        : '<li><span class="when">Unavailable</span><br>Epoch records could not be loaded. Retrying on the next refresh.</li>';
+    } else {
+      el.innerHTML = '<li><span class="when">Quiet so far</span><br>No capped withdrawals, sharp drops, or acts of restraint in the settled epochs yet.</li>';
+    }
+    return;
+  }
+  var html = items.map(function(it){
     return '<li><span class="when">Epoch ' + it.epoch + '</span><br>' + it.text + '</li>';
   }).join("");
+  if(failed.length){
+    html += '<li><span class="when">Partial</span><br>Drama is partial: epoch records for epoch' + (failed.length > 1 ? "s " : " ") + failed.join(", ")
+      + ' could not be loaded, so their events are missing here.</li>';
+  }
+  el.innerHTML = html;
 }
 
-function renderAll(){ renderLobby(); renderRoom(); renderEpochs(); renderFeed(); }
+function renderAll(){ renderLobby(); renderRoom(); renderEpochs(); renderReplay(); renderFeed(); }
 
 function setStatus(stale, msg){
   var el = document.getElementById("status");
@@ -315,12 +586,30 @@ function loadSelectedRoom(renderAfter){
   if(id == null) return Promise.resolve();
   var room = state.rooms.filter(function(x){ return x.id === id; })[0];
   if(!room) return Promise.resolve();
-  var jobs = [];
-  for(var e=0; e<room.next_epoch_to_settle; e++){
-    (function(ep){ jobs.push(rpc("get_epoch", {room_id:id, epoch:ep})); })(e);
-  }
-  return Promise.all(jobs).then(function(list){
-    state.epochsByRoom[id] = list.filter(function(x){ return x; });
+  var st = state.epochState[id] || (state.epochState[id] = { failed: {}, loading: false });
+  var have = {};
+  (state.epochsByRoom[id] || []).forEach(function(e){ have[e.epoch] = true; });
+  var want = [];
+  for(var ep=0; ep<room.next_epoch_to_settle; ep++){ if(!have[ep]) want.push(ep); }
+  if(!want.length){ if(renderAfter) renderAll(); return Promise.resolve(); }
+  st.loading = true;
+  if(renderAfter) renderAll();
+  var jobs = want.map(function(ep){
+    return rpcRetry("get_epoch", {room_id:id, epoch:ep}, 4).then(function(rec){
+      if(rec){
+        var list = state.epochsByRoom[id] || (state.epochsByRoom[id] = []);
+        if(!list.some(function(x){ return x.epoch === rec.epoch; })){
+          list.push(rec);
+          list.sort(function(a,b){ return a.epoch - b.epoch; });
+        }
+        delete st.failed[ep];
+      } else {
+        st.failed[ep] = true;
+      }
+    }).catch(function(){ st.failed[ep] = true; });
+  });
+  return Promise.all(jobs).then(function(){
+    st.loading = false;
     if(renderAfter) renderAll();
   });
 }
