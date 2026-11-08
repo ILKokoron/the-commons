@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.py[cod]
+contract/target/
+records/*
+!records/.gitkeep
+agents/logs/
+.env
+.env.*
+.near-credentials/
