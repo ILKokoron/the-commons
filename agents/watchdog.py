@@ -14,20 +14,22 @@ health are checked per runner:
    log holds a successful commit or reveal line carrying a real tx
    id within the last 2 epoch lengths (room 2 epochs are 600 s, so
    1200 s). A runner can be alive and logging failure retries for
-   hours while never landing a commit (that is exactly how the
-   2026-11-08 room 2 stall hid: LackBalanceForState on the contract
-   plus operator accounts under the near CLI upfront balance wall).
-   Relaunching does not fix that class of problem, so a non-playing
-   runner is NOT relaunched; it is reported with one NOT-PLAYING
-   line per runner, plus a dated copy in fleet-watchdog.log.
+   hours while never landing a commit (for example when the
+   contract account cannot cover the storage cost of new state, or
+   an operator account cannot cover the near CLI's upfront balance
+   requirement). Relaunching does not fix that class of problem,
+   so a non-playing runner is NOT relaunched; it is reported with
+   one NOT-PLAYING line per runner, plus a dated copy in
+   fleet-watchdog.log.
 
 The run also reads the v1 contract account balance and storage via
 RPC and raises ALARM-HEADROOM when the storage headroom drops
 under a threshold (default 0.05 NEAR, env COMMONS_HEADROOM_ALARM_NEAR
-overrides it). At the measured growth of about 0.00153 NEAR of
-storage per settled epoch, 0.05 NEAR of headroom is roughly 32
-epochs, about 5 hours, of warning before the contract can no
-longer store new commitments.
+overrides it). At the measured growth of about 0.0395 NEAR of
+storage per settled epoch on a full 10-feeder room, 0.05 NEAR of
+headroom is roughly 1 epoch of warning before the contract can no
+longer store new commitments, so the alarm is a last-epoch
+tripwire, not hours of warning.
 
 Summary output: when every runner is playing and no alarm fires,
 exactly one PLAYING-OK line is printed. When some runners are not
@@ -67,6 +69,13 @@ LOG_TAIL_BYTES = 512 * 1024
 SUCCESS_RE = re.compile(
     r"^\[(\d{2}):(\d{2}):(\d{2})\] epoch (\d+): (?:committed|revealed)\b"
     r".*\btx=([1-9A-HJ-NP-Za-km-z]{32,})")
+# Any timestamped runner log line, for timezone detection.
+TIME_RE = re.compile(r"^\[(\d{2}):(\d{2}):(\d{2})\]")
+
+# Runner log lines carry local wall time, and the zone depends on
+# whatever launched the runner: cron runs under Asia/Jakarta, some
+# manual launches under UTC. Both zones must be understood.
+LOG_ZONES = (0, 7 * 3600)
 
 
 def dated(line):
@@ -137,17 +146,41 @@ def get_headroom_near():
         return None
 
 
-def resolve_log_time(hh, mm, ss, now):
-    """Resolve an HH:MM:SS UTC log timestamp to an epoch time.
+def resolve_log_time(hh, mm, ss, now, zone_offset=0):
+    """Resolve an HH:MM:SS log timestamp to an epoch time.
 
-    Log lines carry no date, so assume today UTC; if that lands in
-    the future by more than 60 s the line is from yesterday."""
-    tm = time.gmtime(now)
+    Log lines carry no date, so assume today in the given zone
+    (offset in seconds east of UTC); if that lands in the future
+    by more than 60 s the line is from yesterday in that zone."""
+    tm = time.gmtime(now + zone_offset)
     candidate = calendar.timegm(
         (tm.tm_year, tm.tm_mon, tm.tm_mday, hh, mm, ss, 0, 0, 0))
+    candidate -= zone_offset
     if candidate - now > 60:
         candidate -= 86400
     return candidate
+
+
+def detect_log_zone(lines, mtime):
+    """Detect which zone a runner log is written in, from its
+    newest timestamped line against the file's mtime.
+
+    The newest line was written at about mtime, so the zone whose
+    interpretation lands within 10 minutes of mtime wins. Returns
+    the zone offset in seconds, or None when neither zone fits."""
+    for line in reversed(lines):
+        m = TIME_RE.match(line)
+        if not m:
+            continue
+        hh, mm, ss = (int(m.group(i)) for i in (1, 2, 3))
+        best = None
+        for zone in LOG_ZONES:
+            cand = resolve_log_time(hh, mm, ss, mtime, zone)
+            delta = abs(cand - mtime)
+            if delta <= 600 and (best is None or delta < best[0]):
+                best = (delta, zone)
+        return best[1] if best else None
+    return None
 
 
 def last_success(logpath, now=None):
@@ -169,13 +202,23 @@ def last_success(logpath, now=None):
     except OSError:
         return None, None
     lines = raw.decode(errors="replace").splitlines()
+    try:
+        mtime = os.path.getmtime(logpath)
+    except OSError:
+        mtime = None
+    zone = detect_log_zone(lines, mtime) if mtime is not None else None
     for line in reversed(lines):
         m = SUCCESS_RE.match(line)
         if not m:
             continue
         hh, mm, ss = (int(m.group(i)) for i in (1, 2, 3))
         epoch = int(m.group(4))
-        age = int(now - resolve_log_time(hh, mm, ss, now))
+        if zone is None:
+            # Zone undetectable: keep the historical UTC reading.
+            resolved = resolve_log_time(hh, mm, ss, now)
+        else:
+            resolved = resolve_log_time(hh, mm, ss, now, zone)
+        age = int(now - resolved)
         return max(age, 0), epoch
     return None, None
 

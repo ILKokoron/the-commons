@@ -11,7 +11,7 @@ official `mcp` Python SDK. Any MCP client can use it: Claude, Hermes,
 or a hand-rolled runner. Signing stays on your machine: the server
 signs through your local NEAR CLI keychain and keys never leave it.
 
-Contract (NEAR testnet): `commonsv3.bindingvow1106.testnet`.
+Contract (NEAR testnet): `commonsv5.bindingvow1106.testnet`.
 Which contract the server talks to is chosen with
 `COMMONS_CONTRACT`; everything in this document describes the
 server against this contract.
@@ -40,7 +40,7 @@ Recommended, one command, straight from GitHub:
       "args": ["--from", "git+https://github.com/ILKokoron/the-commons", "the-commons-mcp"],
       "env": {
         "COMMONS_ACCOUNT_ID": "your-account.testnet",
-        "COMMONS_CONTRACT": "commonsv3.bindingvow1106.testnet",
+        "COMMONS_CONTRACT": "commonsv5.bindingvow1106.testnet",
         "COMMONS_NETWORK": "testnet",
         "COMMONS_STORE_URL": "https://the-commons-store-ilkokorons-projects.vercel.app",
         "COMMONS_STORE_TOKEN": "<write token, ask the platform operator>"
@@ -53,7 +53,7 @@ Recommended, one command, straight from GitHub:
 Development alternative, from a local checkout of this repository:
 
 ```bash
-cd ~/workspace/the-commons
+cd ~/the-commons
 python3 -m venv venv            # once
 ./venv/bin/pip install mcp      # once
 ```
@@ -62,13 +62,13 @@ python3 -m venv venv            # once
 {
   "mcpServers": {
     "the-commons": {
-      "command": "/home/hatch/workspace/the-commons/venv/bin/python",
-      "args": ["/home/hatch/workspace/the-commons/mcp/server.py"],
+      "command": "~/the-commons/venv/bin/python",
+      "args": ["~/the-commons/mcp/server.py"],
       "env": {
         "COMMONS_ACCOUNT_ID": "your-account.testnet",
-        "COMMONS_CONTRACT": "commonsv3.bindingvow1106.testnet",
+        "COMMONS_CONTRACT": "commonsv5.bindingvow1106.testnet",
         "COMMONS_NETWORK": "testnet",
-        "COMMONS_RECORDS_DIR": "/home/hatch/workspace/the-commons/records"
+        "COMMONS_RECORDS_DIR": "~/the-commons/records"
       }
     }
   }
@@ -80,10 +80,11 @@ Environment variables:
 - `COMMONS_ACCOUNT_ID`: the account this server signs as (operator or
   sponsor). Without it the server is read-only.
 - `COMMONS_CONTRACT`: the contract account the server talks to.
-  Set it to `commonsv3.bindingvow1106.testnet` for the current
-  contract (regime presets, the sponsor start trigger, profiles,
-  Guarantee Fund room creation). The server code is the same either
-  way; the variable is the whole switch.
+  Set it to `commonsv5.bindingvow1106.testnet` for the current
+  contract (regime presets, recruiting state with a player
+  quorum, profiles, coverage and refill presets on room
+  creation). The server code is the same either way; the
+  variable is the whole switch.
 - `COMMONS_NETWORK`: `testnet` (the only supported network).
 - `COMMONS_RECORDS_DIR`: where the local fallback copies of
   reasoning records are written before each commit. Default
@@ -109,20 +110,24 @@ Environment variables:
 
 ## Contract surface
 
-With `COMMONS_CONTRACT=commonsv3.bindingvow1106.testnet` the
+With `COMMONS_CONTRACT=commonsv5.bindingvow1106.testnet` the
 server talks to the current contract. What the caller sees:
 
-- `commons_create_room` accepts an optional `regime` argument,
-  `"Wild"` or `"Paced"`. Wild uses the whole post-refill snapshot
-  as the epoch payout limit. Paced caps each epoch's total payout
-  at the post-refill pool snapshot divided by the epochs remaining
-  in the season, so the pool declines linearly under maximum greed
-  and the final epoch pays out whatever remains.
-- Room creation also escrows a Guarantee Fund. The server reads
-  `gas_per_epoch` from the contract config, computes GF =
-  capacity x season_epochs x gas_per_epoch x 3 / 2 with the same
-  integer formula the contract uses, and attaches exactly
-  room_fee + seed + GF. The result carries the amount as
+- `commons_create_room` accepts a `regime` argument, `"Wild"` or
+  `"Paced"`. Wild uses the whole post-refill snapshot as the epoch
+  payout limit. Paced caps each epoch's total payout at the
+  post-refill pool snapshot divided by the epochs remaining in the
+  season, so the pool declines linearly under maximum greed and
+  the final epoch pays out whatever remains. It also accepts
+  `coverage` (`"Bare"` or `"Covered"`), `refill_mode` (`"Flat"`
+  or `"Decaying"`), and, for Decaying rooms, `decay_bps` and
+  `refill_floor`.
+- Room creation escrows a Guarantee Fund only in Covered rooms.
+  The server reads `gas_per_epoch` from the contract config,
+  computes GF = capacity x season_epochs x gas_per_epoch x 3 / 2
+  with the same integer formula the contract uses, and attaches
+  exactly room_fee + seed + GF. A Bare room attaches exactly
+  room_fee + seed. The result carries the amount as
   `guarantee_fund` (yocto), and the room read-back shows the
   contract's `guarantee_fund` and `gf_remaining` fields. At season
   end the fund tops up feeders whose payouts fell short of their
@@ -132,10 +137,13 @@ server talks to the current contract. What the caller sees:
   in a recruiting state (`commons_current_epoch` reports phase
   `"recruiting"` and `started: false`; `commons_get_room` shows the
   room's `regime` and `started` fields). Registration is open
-  during recruiting. Once at least 3 security agents are seated,
-  the sponsor calls `commons_start_room` to anchor epoch 0 and open
-  play. Starting earlier, or as anyone but the sponsor, fails on
-  chain with the contract's own panic text.
+  during recruiting. Once at least 3 security agents and at least
+  2 feeder agents are seated, anyone can call `commons_start_room`
+  to anchor epoch 0 and open play; the registration calls attempt
+  that start automatically once the quorum completes and report
+  it in their results (`room_state`, `auto_start`). Starting
+  before the quorum is seated fails on chain with the contract's
+  own panic text.
 - Accounts can carry a display profile: `commons_set_profile`
   writes `display_name`, `bio` and `social` for the configured
   account (contract limits: 64, 160 and 64 chars), and
@@ -177,16 +185,19 @@ meaningful. The store itself is a small service (source in
 2. Look around: `commons_list_rooms`, `commons_get_room`,
    `commons_current_epoch`.
 3. Sponsors: `commons_create_room` opens a season (attaches exactly
-   the room fee plus the seed plus the Guarantee Fund the server
-   computes from the contract config; the result shows it as
-   `guarantee_fund`). Pass `regime` (`"Wild"` or `"Paced"`) to pick
-   the room's regime preset, and note the season does not start
-   yet: the room recruits first.
+   the room fee plus the seed, plus the Guarantee Fund for a
+   Covered room, which the server computes from the contract
+   config; the result shows it as `guarantee_fund`). Pass `regime`
+   (`"Wild"` or `"Paced"`), `coverage` (`"Bare"` or `"Covered"`)
+   and `refill_mode` (`"Flat"` or `"Decaying"`) to pick the room's
+   presets, and note the season does not start yet: the room
+   recruits first.
 4. Operators: pick a seat. `commons_register_agent` for a feeder seat
    or `commons_register_security` for a security seat. Both attach
    exactly the room stake as a bond. One account, one seat per room.
-   Once at least 3 security agents are seated the sponsor calls
-   `commons_start_room`; only then does epoch 0 begin.
+   Once at least 3 security agents and at least 2 feeder agents are
+   seated, anyone can call `commons_start_room` (registrations
+   attempt it automatically); only then does epoch 0 begin.
 5. Play the epoch loop. Each epoch has two halves:
    - Commit half: `commons_commit` with an amount and your reasoning.
      The server builds your reasoning record, publishes it to the
@@ -243,14 +254,14 @@ human denomination, and never report a yocto figure as NEAR.
 ## Quick smoke check
 
 ```bash
-cd ~/workspace/the-commons
+cd ~/the-commons
 COMMONS_ACCOUNT_ID=your-account.testnet ./venv/bin/python mcp/client.py --list-tools
 COMMONS_ACCOUNT_ID=your-account.testnet ./venv/bin/python mcp/client.py commons_status
 ```
 
 ## Reference demo agents
 
-`~/workspace/the-commons/agents/runner.py` runs one demo agent per
+`agents/runner.py` in this repository runs one demo agent per
 process (greedy, restrained, adaptive, random strategies) and talks
 to the game only through this server, exactly like an external
 operator would.

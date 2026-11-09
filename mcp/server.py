@@ -15,7 +15,14 @@ Configuration comes from the environment:
                        regime presets, the sponsor start trigger and
                        profiles (see commons_create_room's regime
                        argument, commons_start_room and the profile
-                       tools).
+                       tools). Set it to
+                       commonsv5.bindingvow1106.testnet for contract
+                       v5, whose rooms also need at least 2 seated
+                       feeders before they can start; registrations
+                       against v5 attempt that start automatically
+                       once the quorum is seated, and
+                       commons_create_room accepts the v4/v5 coverage
+                       and refill arguments there.
   COMMONS_NETWORK      default testnet (only testnet is supported)
   COMMONS_RECORDS_DIR  where the local fallback copies of reasoning
                        records are written, default
@@ -119,10 +126,13 @@ server = MCPServer(
         "Operators register in a room (commons_register_agent for a "
         "feeder seat, commons_register_security for a security seat), "
         "then each epoch: commons_commit during the commit phase and "
-        "commons_reveal during the reveal phase. On the v2 contract a "
-        "new room sits in a recruiting state until its sponsor calls "
-        "commons_start_room (which needs at least 3 registered "
-        "security agents), and accounts can carry a display profile "
+        "commons_reveal during the reveal phase. On v2 and later "
+        "contracts a new room sits in a recruiting state until it "
+        "starts, which needs at least 3 registered security agents "
+        "(the sponsor starts it on v2 and v3, any account on v4, and "
+        "on v5 at least 2 feeders must also be seated, after which "
+        "the registration that completes the quorum starts the room "
+        "automatically), and accounts can carry a display profile "
         "(commons_set_profile, commons_get_profile). Amounts are NEAR "
         "decimal strings like \"0.005\" or integer yocto strings."
     ),
@@ -549,6 +559,10 @@ def commons_create_room(
     season_epochs: int,
     data_exclusivity_days: int,
     regime: str = "",
+    coverage: str = "",
+    refill_mode: str = "",
+    decay_bps: int = 9800,
+    refill_floor: str = "0",
 ) -> dict:
     """Sponsor action: open a new room (season). Amounts (stake, seed,
     refill_per_epoch) are NEAR decimal strings like "0.005" or integer
@@ -572,18 +586,46 @@ def commons_create_room(
     is sent exactly as before, with no regime argument at all, which
     is what the v1 contract expects (v1 rejects unknown arguments).
     Passing a regime while COMMONS_CONTRACT points at the v1 contract
-    will therefore fail on chain."""
+    will therefore fail on chain.
+
+    Contracts v4 and v5 take four more arguments, sent automatically
+    when COMMONS_CONTRACT points at one of them: coverage ("Covered"
+    escrows the Guarantee Fund above; "Bare" escrows none and the
+    deposit is fee + seed only; default "Covered"), refill_mode
+    ("Flat", or "Decaying" where each epoch's refill is the previous
+    one times decay_bps / 10000, floored at refill_floor; default
+    "Flat", decay_bps default 9800, refill_floor a NEAR amount
+    default "0"). Regime defaults to "Wild" on v4 and v5, where the
+    argument is required. Passing coverage or refill_mode against an
+    older contract is an error, not silently ignored."""
     reg = (regime or "").strip()
     if reg and reg not in ("Wild", "Paced"):
         return err(f'invalid regime {regime!r}: must be "Wild" or '
                    '"Paced" (contract v2), or omitted entirely for a '
                    "v1 contract")
+    v45 = CONTRACT.split(".")[0] in ("commonsv4", "commonsv5")
+    cov = (coverage or "").strip()
+    rm = (refill_mode or "").strip()
+    if not v45 and (cov or rm):
+        return err("coverage and refill_mode are contract v4/v5 "
+                   "arguments; the configured contract is "
+                   f"{CONTRACT}")
+    if v45:
+        cov = cov or "Covered"
+        if cov not in ("Bare", "Covered"):
+            return err(f'invalid coverage {coverage!r}: must be '
+                       '"Bare" or "Covered"')
+        rm = rm or "Flat"
+        if rm not in ("Flat", "Decaying"):
+            return err(f'invalid refill_mode {refill_mode!r}: must '
+                       'be "Flat" or "Decaying"')
+        reg = reg or "Wild"
     try:
         cfg = view("get_config", {})
         fee = int(cfg["room_fee"])
         seed_y = to_yocto(seed)
         gf = 0
-        if cfg.get("gas_per_epoch") is not None:
+        if cfg.get("gas_per_epoch") is not None and cov != "Bare":
             gf = (capacity * season_epochs * int(cfg["gas_per_epoch"]) * 3) // 2
         args = {
             "name": name,
@@ -598,6 +640,11 @@ def commons_create_room(
         }
         if reg:
             args["regime"] = reg
+        if v45:
+            args["coverage"] = cov
+            args["refill_mode"] = rm
+            args["decay_bps"] = int(decay_bps)
+            args["refill_floor"] = str(to_yocto(refill_floor))
     except Exception as e:
         return err(f"bad arguments or config read failed: {e}")
     res = near_call("create_room", args, deposit_yocto=fee + seed_y + gf)
@@ -605,6 +652,9 @@ def commons_create_room(
         return res
     if gf:
         res["guarantee_fund"] = str(gf)
+    if v45:
+        res["coverage"] = cov
+        res["refill_mode"] = rm
     try:
         cfg2 = view("get_config", {})
         new_id = int(cfg2["rooms_created"]) - 1
@@ -621,16 +671,20 @@ def commons_create_room(
 
 @server.tool()
 def commons_start_room(room_id: int) -> dict:
-    """Contract v2 only, sponsor only: start a room that is still in
-    its recruiting state. Anchors epoch 0 at the moment of the call;
-    before this, registration is open but commit, reveal and settle
-    are rejected by the contract. The contract requires at least 3
-    registered security agents before a room can start, so abuse
-    reports can actually reach their confirm threshold. A caller who
-    is not the sponsor, or a room with fewer than 3 security agents,
-    fails on chain and the contract's panic text is returned in the
-    error, unchanged. Verified by reading the room back (started must
-    be true). On a v1 contract this fails with a method-not-found
+    """Start a room that is still in its recruiting state. Anchors
+    epoch 0 at the moment of the call; before this, registration is
+    open but commit, reveal and settle are rejected by the contract.
+    Who may call it depends on the contract: v2 and v3 are sponsor
+    only and need at least 3 registered security agents, so abuse
+    reports can actually reach their confirm threshold. v4 makes the
+    call permissionless (any account) under the same security gate.
+    v5 adds the player quorum: at least 2 feeder agents must also be
+    seated, so a room with a lone agent keeps waiting for players;
+    the registration tools fire this call automatically when a
+    registration completes the quorum. A rejected call fails on
+    chain and the contract's panic text is returned in the error,
+    unchanged. Verified by reading the room back (started must be
+    true). On a v1 contract this fails with a method-not-found
     style error, because v1 starts seasons at creation."""
     res = near_call("start_room", {"room_id": room_id})
     if not res["ok"]:
@@ -669,7 +723,51 @@ def _register(room_id, fn, role):
             res["error"] = f"read-back mismatch: expected role {role}"
     except Exception as e:
         res["readback_error"] = str(e)
+    if res["ok"]:
+        _maybe_auto_start(res, room_id)
     return res
+
+
+def _maybe_auto_start(res, room_id):
+    """The v5 room model: an empty room waits for players and starts
+    itself once the quorum is seated (at least 2 feeders and 3
+    security). The contract enforces the quorum inside start_room;
+    the agent whose registration completes it fires the call, so
+    from the players' side the room starts on its own. Only
+    attempted where start_room is permissionless (v4, v5) or by the
+    room's own sponsor (v2 and later); v1 starts rooms at creation,
+    so this is a no-op there. The outcome lands on the register
+    result as room_state / auto_start and never fails the
+    registration itself."""
+    try:
+        if CONTRACT.split(".")[0] == "commons":
+            return
+        room = view("get_room", {"room_id": room_id})
+        if not room or room.get("started") or room.get("ended") \
+                or room.get("cancelled"):
+            return
+        feeders = int(room.get("feeders_count", 0))
+        security = int(room.get("security_count", 0))
+        res["room_state"] = (
+            f"recruiting: {feeders} feeder(s), {security} security "
+            f"(starts at 2 feeders + 3 security)")
+        if feeders < 2 or security < 3:
+            return
+        permissionless = CONTRACT.split(".")[0] in ("commonsv4", "commonsv5")
+        if not permissionless and ACCOUNT != room.get("sponsor"):
+            return
+        start = near_call("start_room", {"room_id": room_id})
+        res["auto_start"] = {"attempted": True, "ok": bool(start.get("ok"))}
+        if start.get("ok"):
+            after = view("get_room", {"room_id": room_id})
+            res["auto_start"]["started"] = bool(after and after.get("started"))
+            if after and after.get("started"):
+                res["room_state"] = \
+                    "started: this registration completed the quorum"
+        else:
+            res["auto_start"]["error"] = start.get("error")
+    except Exception as e:
+        res["auto_start"] = {"attempted": False, "error": str(e)}
 
 
 @server.tool()

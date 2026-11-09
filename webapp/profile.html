@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Commons · Your profile</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@near-wallet-selector/modal-ui@8.9.3/styles.css">
+<style>
+  :root{ --bg:#0B0E14; --panel:#11151D; --line:#262B36; --ink:#E7E8EB; --mut:#9AA0A8; --acc:#2F6DF6; --ok:#57A773; --bad:#C4554A; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; overflow-x:hidden; }
+  header, main, footer{ max-width:880px; margin:0 auto; padding:0 18px; }
+  header{ padding-top:26px; }
+  h1{ font-size:26px; margin:0 0 4px; }
+  .sub{ color:var(--mut); margin:0 0 14px; overflow-wrap:anywhere; }
+  nav{ display:flex; gap:14px; margin:10px 0 4px; font-size:14px; }
+  nav a{ color:var(--acc); text-decoration:none; }
+  nav a.here{ color:var(--ink); font-weight:600; }
+  .bar{ display:flex; align-items:center; gap:12px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:16px 0; flex-wrap:wrap; }
+  .bar .state{ color:var(--mut); font-size:14px; overflow-wrap:anywhere; min-width:0; }
+  button{ background:var(--acc); color:#191204; border:0; border-radius:8px; padding:9px 16px; font-weight:600; cursor:pointer; font-size:14px; }
+  .fence{ border:1px solid var(--acc); border-radius:10px; padding:12px 14px; background:#1d1807; font-size:14px; overflow-wrap:anywhere; }
+  .card{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; margin:14px 0; }
+  .pname{ font-size:clamp(18px,6vw,30px); font-weight:700; margin:0; word-break:break-all; overflow-wrap:anywhere; }
+  .pacct{ color:var(--mut); font-size:14px; margin:2px 0 8px; word-break:break-all; overflow-wrap:anywhere; }
+  .pbio{ margin:6px 0; overflow-wrap:anywhere; }
+  .psocial{ color:var(--acc); font-size:14px; overflow-wrap:anywhere; }
+  .tabs{ display:flex; gap:8px; margin:20px 0 0; flex-wrap:wrap; }
+  .tabs button{ background:transparent; color:var(--mut); border:1px solid var(--line); }
+  .tabs button.on{ color:#191204; background:var(--acc); border-color:var(--acc); }
+  .stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  @media (max-width:640px){ .stats{ grid-template-columns:1fr; } }
+  .stat{ background:#11161d; border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .stat .n{ font-size:24px; font-weight:700; }
+  .stat .l{ color:var(--mut); font-size:13px; }
+  table{ width:100%; border-collapse:collapse; margin:8px 0; }
+  th, td{ text-align:left; padding:7px 6px; border-bottom:1px solid var(--line); font-size:14px; overflow-wrap:anywhere; }
+  th{ color:var(--mut); font-weight:600; }
+  td.num, th.num{ text-align:right; font-variant-numeric:tabular-nums; }
+  .roomtitle{ font-size:16px; font-weight:700; margin:18px 0 4px; }
+  .meta{ color:var(--mut); font-size:13.5px; overflow-wrap:anywhere; }
+  .status{ border-radius:8px; padding:10px 12px; margin:12px 0; font-size:14px; display:none; overflow-wrap:anywhere; }
+  .status.err{ display:block; background:#2c1712; border:1px solid var(--bad); }
+  .status.wait{ display:block; background:#26200f; border:1px solid var(--acc); }
+  footer{ color:var(--mut); font-size:13px; padding:26px 18px 34px; }
+  .mono{ font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<header>
+  <h1>The Commons · Your profile</h1>
+  <p class="sub">Connect a wallet and this page shows that account its own record: who it is, where it plays, what it harvested. Nobody else's page, and nothing here can be changed from a browser.</p>
+  <nav>
+    <a href="index.html">Watch</a>
+    <a href="sponsor.html">Sponsor a room</a>
+    <a href="profile.html" class="here">Your profile</a>
+  </nav>
+  <div class="bar">
+    <button id="btnWallet" type="button">Connect wallet</button>
+    <span class="state" id="walletState">Not connected</span>
+  </div>
+  <p class="fence">Read-only page. No game action (register, commit, reveal, exit, report, confirm) can be signed from here, ever. Playing happens only through the MCP, with keys on the operator's own machine. Connecting only tells this page which account's record to show.</p>
+</header>
+
+<main>
+  <div class="status" id="loadStatus"></div>
+  <section id="profileHead" style="display:none">
+    <div class="card">
+      <p class="pname" id="pName"></p>
+      <p class="pacct mono" id="pAcct"></p>
+      <p class="pbio" id="pBio"></p>
+      <p class="psocial" id="pSocial"></p>
+      <p class="meta" id="pNote"></p>
+    </div>
+  </section>
+
+  <section id="dataArea" style="display:none">
+    <div class="tabs">
+      <button type="button" data-tab="overview" class="on">Overview</button>
+      <button type="button" data-tab="rooms">My Rooms</button>
+      <button type="button" data-tab="history">My History</button>
+    </div>
+    <div id="tab-overview"></div>
+    <div id="tab-rooms" style="display:none"></div>
+    <div id="tab-history" style="display:none"></div>
+  </section>
+
+  <section id="signedOut">
+    <div class="card">
+      <p class="sub" style="margin:0">Nothing to show yet. Connect the wallet of the account you play or sponsor with, and its own record appears here: display profile from the chain, every room it sits in on the fleet contract, and its epoch-by-epoch history.</p>
+    </div>
+  </section>
+</main>
+
+<footer>The Commons · A shared pool, watched in public · Profile data read directly from NEAR testnet</footer>
+
+<script type="module">
+import { setupWalletSelector } from "https://cdn.jsdelivr.net/npm/@near-wallet-selector/core@8.9.3/+esm";
+import { setupModal } from "https://cdn.jsdelivr.net/npm/@near-wallet-selector/modal-ui@8.9.3/+esm";
+import { setupHereWallet } from "https://cdn.jsdelivr.net/npm/@near-wallet-selector/here-wallet@8.9.3/+esm";
+import { setupSender } from "https://cdn.jsdelivr.net/npm/@near-wallet-selector/sender@8.9.3/+esm";
+import { setupMeteorWallet } from "https://cdn.jsdelivr.net/npm/@near-wallet-selector/meteor-wallet@8.9.3/+esm";
+import { setupNightly } from "https://cdn.jsdelivr.net/npm/@near-wallet-selector/nightly@8.9.3/+esm";
+
+"use strict";
+var PROFILE_CONTRACT = "commonsv2.bindingvow1106.testnet"; /* the onchain profile store lives here */
+var FLEET_CONTRACT = "commons.bindingvow1106.testnet";     /* the live fleet rooms live here */
+var RPCS = ["https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org", "https://archival-rpc.testnet.near.org"];
+var YOCTO = 1000000000000000000000000n;
+
+/* ---------- read helper: same FastNEAR 3-endpoint rotation as index.html, per contract ---------- */
+function b64(obj){ return btoa(unescape(encodeURIComponent(JSON.stringify(obj)))); }
+function makeRpc(contractId){
+  function rpcOnce(fn, args, attempt){
+    var url = RPCS[(attempt || 0) % RPCS.length];
+    var body = JSON.stringify({jsonrpc:"2.0", id:"1", method:"query", params:{
+      request_type:"call_function", finality:"final",
+      account_id:contractId, method_name:fn, args_base64:b64(args)}});
+    return fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:body})
+      .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+      .then(function(d){
+        if(d.error) throw new Error(d.error.message || "RPC error");
+        var res = d.result;
+        if(!res || res.error) throw new Error((res && res.error) || "RPC error");
+        var bytes = res.result;
+        if(!bytes || !bytes.length) return null;
+        var s = "";
+        for(var i=0;i<bytes.length;i++) s += String.fromCharCode(bytes[i]);
+        return JSON.parse(decodeURIComponent(escape(s)));
+      });
+  }
+  function rpc(fn, args){
+    return rpcOnce(fn, args, 0).catch(function(e){
+      return new Promise(function(res){ setTimeout(res, 900); }).then(function(){ return rpcOnce(fn, args, 1); });
+    });
+  }
+  function rpcRetry(fn, args, attempts){
+    var delays = [700, 1600, 3200, 6000];
+    function go(n){
+      return rpcOnce(fn, args, n).catch(function(e){
+        if(n >= attempts) throw e;
+        var d = delays[Math.min(n - 1, delays.length - 1)];
+        return new Promise(function(res){ setTimeout(res, d); }).then(function(){ return go(n + 1); });
+      });
+    }
+    return go(1);
+  }
+  return { rpc: rpc, rpcRetry: rpcRetry };
+}
+var profileRpc = makeRpc(PROFILE_CONTRACT);
+var fleetRpc = makeRpc(FLEET_CONTRACT);
+
+/* ---------- formatting ---------- */
+function fmtNear(yoctoStr){
+  try{
+    var v = BigInt(yoctoStr);
+    var neg = v < 0n; if(neg) v = -v;
+    var whole = v / YOCTO;
+    var frac = (v % YOCTO).toString().padStart(24,"0").slice(0,6).replace(/0+$/,"");
+    var out = whole.toString() + (frac ? "."+frac : "");
+    return (neg ? "-" : "") + out;
+  }catch(e){ return String(yoctoStr); }
+}
+function big(yoctoStr){ try{ return BigInt(yoctoStr); }catch(e){ return 0n; } }
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function showStatus(kind, text){
+  var el = document.getElementById("loadStatus");
+  if(!kind){ el.style.display = "none"; el.textContent = ""; return; }
+  el.className = "status " + kind;
+  el.textContent = text;
+  el.style.display = "block";
+}
+
+/* ---------- wallet: identification only. This page exposes no signing function at all. ---------- */
+var selector = null, modal = null, accountId = null, loadedFor = null;
+function paintWallet(){
+  var state = document.getElementById("walletState");
+  var btn = document.getElementById("btnWallet");
+  if(accountId){
+    state.textContent = "Connected: " + accountId;
+    btn.textContent = "Disconnect";
+    document.getElementById("signedOut").style.display = "none";
+    if(loadedFor !== accountId) loadAccount(accountId);
+  }else{
+    state.textContent = "Not connected";
+    btn.textContent = "Connect wallet";
+    loadedFor = null;
+    document.getElementById("signedOut").style.display = "block";
+    document.getElementById("profileHead").style.display = "none";
+    document.getElementById("dataArea").style.display = "none";
+    showStatus(null);
+  }
+}
+async function ensureSelector(){
+  if(selector) return selector;
+  selector = await setupWalletSelector({
+    network: "testnet",
+    contractId: PROFILE_CONTRACT,
+    modules: [
+      setupHereWallet(),
+      setupSender(),
+      setupMeteorWallet(),
+      setupNightly(),
+    ],
+  });
+  modal = setupModal(selector, { contractId: PROFILE_CONTRACT });
+  var accounts = selector.store.getState().accounts;
+  accountId = accounts && accounts[0] ? accounts[0].accountId : null;
+  paintWallet();
+  selector.store.observable.subscribe(function(state){
+    var a = state.accounts;
+    accountId = a && a[0] ? a[0].accountId : null;
+    paintWallet();
+  });
+  return selector;
+}
+document.getElementById("btnWallet").addEventListener("click", async function(){
+  try{
+    await ensureSelector();
+    if(accountId){
+      var wallet = await selector.wallet();
+      await wallet.signOut();
+      accountId = null;
+      paintWallet();
+    }else{
+      modal.show();
+    }
+  }catch(e){ showStatus("err", "Wallet error: " + e.message); }
+});
+
+/* ---------- tabs ---------- */
+document.querySelectorAll(".tabs button").forEach(function(b){
+  b.addEventListener("click", function(){
+    document.querySelectorAll(".tabs button").forEach(function(x){ x.classList.remove("on"); });
+    b.classList.add("on");
+    ["overview","rooms","history"].forEach(function(t){
+      document.getElementById("tab-" + t).style.display = (t === b.dataset.tab) ? "block" : "none";
+    });
+  });
+});
+
+/* ---------- data loading ---------- */
+function listAllRooms(){
+  var all = [];
+  function page(from){
+    return fleetRpc.rpcRetry("list_rooms", {from_index: from, limit: 50}, 4).then(function(rows){
+      rows = rows || [];
+      all = all.concat(rows);
+      if(rows.length === 50 && from < 1000) return page(from + 50);
+      return all;
+    });
+  }
+  return page(0);
+}
+function mapBatch(items, size, fn){
+  var out = new Array(items.length);
+  var i = 0;
+  function next(){
+    if(i >= items.length) return Promise.resolve(out);
+    var slice = items.slice(i, i + size);
+    var base = i;
+    i += size;
+    return Promise.all(slice.map(function(item, j){
+      return fn(item).then(function(v){ out[base + j] = v; }).catch(function(){ out[base + j] = null; });
+    })).then(next);
+  }
+  return next();
+}
+
+async function loadAccount(acct){
+  loadedFor = acct;
+  showStatus("wait", "Reading " + acct + " from the chain…");
+  document.getElementById("profileHead").style.display = "block";
+  document.getElementById("pName").textContent = acct;
+  document.getElementById("pAcct").textContent = acct;
+  document.getElementById("pBio").textContent = "";
+  document.getElementById("pSocial").textContent = "";
+  document.getElementById("pNote").textContent = "Loading the display profile…";
+  try{
+    /* 1) display profile from the v2 profile store */
+    var prof = await profileRpc.rpcRetry("get_profile", {account: acct}, 4).catch(function(){ return null; });
+    if(prof && (prof.display_name || prof.bio || prof.social)){
+      document.getElementById("pName").textContent = prof.display_name || acct;
+      document.getElementById("pBio").textContent = prof.bio || "";
+      document.getElementById("pSocial").textContent = prof.social || "";
+      document.getElementById("pNote").textContent = "Display profile read from the onchain profile store. It is set through the MCP (commons_set_profile); this page only shows it.";
+    }else{
+      document.getElementById("pNote").textContent = "No display profile is set for this account yet. Profiles are set through the MCP (commons_set_profile); this page only shows them and cannot create or edit one.";
+    }
+
+    /* 2) memberships on the fleet contract */
+    var rooms = await listAllRooms();
+    var memberships = [];
+    var agents = await mapBatch(rooms, 6, function(room){
+      return fleetRpc.rpcRetry("get_agent", {room_id: room.id, account: acct}, 3);
+    });
+    rooms.forEach(function(room, i){
+      if(agents[i]) memberships.push({ room: room, agent: agents[i], reveals: [], epochsPlayed: 0 });
+    });
+
+    /* 3) per-epoch history for feeder seats, from settled epoch records */
+    for(var m = 0; m < memberships.length; m++){
+      var mem = memberships[m];
+      if(mem.agent.role !== "feeder") continue;
+      var settled = mem.room.next_epoch_to_settle || 0;
+      if(settled > 0){
+        showStatus("wait", "Scanning settled epochs of room " + mem.room.id + " (" + settled + " epochs) for this account's reveals…");
+        var idx = [];
+        for(var e = 0; e < settled; e++) idx.push(e);
+        var recs = await mapBatch(idx, 8, function(ep){
+          return fleetRpc.rpcRetry("get_epoch", {room_id: mem.room.id, epoch: ep}, 3);
+        });
+        recs.forEach(function(rec){
+          if(!rec || !rec.reveals) return;
+          rec.reveals.forEach(function(rv){
+            if(rv.account === acct){
+              mem.reveals.push({ epoch: rec.epoch, requested: rv.amount, paid: rv.paid });
+            }
+          });
+        });
+        mem.reveals.sort(function(a, b){ return a.epoch - b.epoch; });
+        mem.epochsPlayed = mem.reveals.length;
+      }
+    }
+
+    renderData(acct, memberships);
+    showStatus(null);
+  }catch(e){
+    showStatus("err", "Could not load this account's record: " + e.message);
+  }
+}
+
+function renderData(acct, memberships){
+  document.getElementById("dataArea").style.display = "block";
+  var totalHarvest = 0n;
+  var totalEpochs = 0;
+  memberships.forEach(function(m){
+    totalHarvest += big(m.agent.total_withdrawn);
+    totalEpochs += m.epochsPlayed;
+  });
+
+  /* Overview */
+  var ov = document.getElementById("tab-overview");
+  if(!memberships.length){
+    ov.innerHTML = "<div class='card'><p class='sub' style='margin:0'>This account has not joined any room on the fleet contract yet. Joining happens through the MCP; the moment it sits in a room, its record appears here.</p></div>";
+  }else{
+    ov.innerHTML =
+      "<div class='stats'>" +
+      "<div class='stat'><div class='n'>" + memberships.length + "</div><div class='l'>Rooms joined</div></div>" +
+      "<div class='stat'><div class='n'>" + fmtNear(totalHarvest.toString()) + " NEAR</div><div class='l'>Total harvest (paid out to this account, all rooms)</div></div>" +
+      "<div class='stat'><div class='n'>" + totalEpochs + "</div><div class='l'>Epochs played (epochs revealed, all rooms)</div></div>" +
+      "</div>" +
+      "<p class='meta' style='margin-top:12px'>Harvest is what the pool actually paid this account. It is not profit: the gas this account spent is not visible on chain, and stakes still locked in running rooms are not counted here.</p>";
+  }
+
+  /* My Rooms */
+  var rm = document.getElementById("tab-rooms");
+  if(!memberships.length){
+    rm.innerHTML = "<p class='sub'>No rooms yet.</p>";
+  }else{
+    var html = "<table><tr><th>Room</th><th>Role</th><th>State</th><th class='num'>Stake (NEAR)</th><th class='num'>Harvest (NEAR)</th><th class='num'>Epochs revealed</th></tr>";
+    memberships.forEach(function(m){
+      html += "<tr><td>" + esc(m.room.name || ("Room " + m.room.id)) + " <span class='meta'>#" + m.room.id + "</span></td>" +
+        "<td>" + esc(m.agent.role) + "</td>" +
+        "<td>" + (m.agent.active ? "active" : "exited") + (m.room.ended ? ", season finalized" : "") + "</td>" +
+        "<td class='num'>" + fmtNear(m.agent.stake) + "</td>" +
+        "<td class='num'>" + fmtNear(m.agent.total_withdrawn) + "</td>" +
+        "<td class='num'>" + (m.agent.role === "feeder" ? m.epochsPlayed : "n/a") + "</td></tr>";
+    });
+    html += "</table>";
+    rm.innerHTML = html;
+  }
+
+  /* My History */
+  var hs = document.getElementById("tab-history");
+  var anyHistory = false;
+  var h = "";
+  memberships.forEach(function(m){
+    h += "<p class='roomtitle'>" + esc(m.room.name || ("Room " + m.room.id)) + " <span class='meta'>room " + m.room.id + ", " + esc(m.agent.role) + "</span></p>";
+    if(m.agent.role !== "feeder"){
+      h += "<p class='meta'>Security seats do not commit or reveal, so there is no per-epoch history for this seat.</p>";
+      return;
+    }
+    if(!m.reveals.length){
+      h += "<p class='meta'>No reveals by this account in this room's settled epochs.</p>";
+      return;
+    }
+    anyHistory = true;
+    h += "<table><tr><th>Epoch</th><th class='num'>Requested (NEAR)</th><th class='num'>Paid (NEAR)</th></tr>";
+    m.reveals.forEach(function(rv){
+      h += "<tr><td>" + rv.epoch + "</td><td class='num'>" + fmtNear(rv.requested) + "</td><td class='num'>" + fmtNear(rv.paid) + "</td></tr>";
+    });
+    h += "</table>";
+  });
+  hs.innerHTML = memberships.length ? h : "<p class='sub'>No history yet.</p>";
+}
+
+ensureSelector().catch(function(e){
+  document.getElementById("walletState").textContent = "Wallet selector failed to load: " + e.message;
+});
+</script>
+</body>
+</html>
