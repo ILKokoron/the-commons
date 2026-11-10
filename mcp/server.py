@@ -36,11 +36,11 @@ Configuration comes from the environment:
                        certified by the platform.
   COMMONS_STORE_TOKEN  write token for the platform record store
   COMMONS_NEAR_CLI     path to the near CLI binary. Resolution order:
-                       this variable when set, then the built-in
-                       default path when that file exists, then
-                       `near` found on PATH. When no binary can be
-                       resolved, write tools fail with an error that
-                       names COMMONS_NEAR_CLI as the fix.
+                       this variable when set, then `near` found on
+                       PATH, then the built-in default path when that
+                       file exists. When no binary can be resolved,
+                       write tools fail with an error that names
+                       COMMONS_NEAR_CLI as the fix.
   COMMONS_COMMIT_MIN_MARGIN_SECS
                        commons_commit refuses to send when fewer than
                        this many seconds remain in the commit phase
@@ -87,16 +87,19 @@ COMMIT_MIN_MARGIN_SECS = int(
 
 def _resolve_near_cli():
     """Resolve the near CLI binary once, in a fixed order:
-    COMMONS_NEAR_CLI when set, then the built-in default path when
-    that file exists, then `near` on PATH. Returns (path, source);
-    path is None when nothing usable was found."""
+    COMMONS_NEAR_CLI when set, then `near` on PATH, then the
+    built-in default path when that file exists. PATH comes before
+    the default because the default is one machine's install layout;
+    a normal npm or cargo install lands on PATH and must win.
+    Returns (path, source); path is None when nothing usable was
+    found."""
     if NEAR_CLI_ENV:
         return os.path.expanduser(NEAR_CLI_ENV), "COMMONS_NEAR_CLI"
-    if os.path.isfile(NEAR_CLI_DEFAULT):
-        return NEAR_CLI_DEFAULT, "built-in default path"
     on_path = shutil.which("near")
     if on_path:
         return on_path, "PATH lookup"
+    if os.path.isfile(NEAR_CLI_DEFAULT):
+        return NEAR_CLI_DEFAULT, "built-in default path"
     return None, "not found"
 
 
@@ -496,12 +499,28 @@ def commons_get_room(room_id: int) -> dict:
 @server.tool()
 def commons_current_epoch(room_id: int) -> dict:
     """Current epoch number, phase (commit or reveal), seconds into the
-    epoch, and whether the season is over. The info record is returned
-    exactly as the contract reports it: on the v2 contract a room that
-    has not been started yet reports phase "recruiting" and started
-    false, and started rooms carry started true."""
+    epoch, and whether the season is over. On the v2+ contracts a room
+    that has not been started yet reports phase "recruiting" and
+    started false, and started rooms carry started true. Two
+    presentation corrections are applied on top of the raw contract
+    answer, because the raw answer misleads operators scanning rooms:
+    a cancelled room reports phase "cancelled" (the contract keeps
+    saying "recruiting" for it), and once the season is over the
+    epoch is clamped to the season length, with the raw time-derived
+    counter preserved in epoch_raw (the contract counts past the end
+    of the season indefinitely)."""
     try:
         info = view("current_epoch", {"room_id": room_id})
+        room = view("get_room", {"room_id": room_id})
+        if room is not None:
+            if room.get("cancelled"):
+                info["phase"] = "cancelled"
+                info["cancelled"] = True
+            season_epochs = int(room.get("season_epochs", 0))
+            if info.get("season_over") and season_epochs \
+                    and int(info.get("epoch", 0)) > season_epochs:
+                info["epoch_raw"] = info["epoch"]
+                info["epoch"] = season_epochs
         return {"ok": True, "info": info}
     except Exception as e:
         return err(f"current_epoch failed: {e}")
