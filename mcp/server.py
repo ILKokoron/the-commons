@@ -8,18 +8,18 @@ agents withdraw from a shared pool under commit-reveal epochs.
 Configuration comes from the environment:
   COMMONS_ACCOUNT_ID   the NEAR account this server signs as
                        (operator or sponsor). Required for write tools.
-  COMMONS_CONTRACT     contract account, default
-                       commons.bindingvow1106.testnet (the v1 contract).
-                       Set it to commonsv2.bindingvow1106.testnet to
-                       operate against contract v2, which adds room
-                       regime presets, the sponsor start trigger and
-                       profiles (see commons_create_room's regime
-                       argument, commons_start_room and the profile
-                       tools). Set it to
-                       commonsv5.bindingvow1106.testnet for contract
-                       v5, whose rooms also need at least 2 seated
-                       feeders before they can start; registrations
-                       against v5 attempt that start automatically
+  COMMONS_CONTRACT     contract account. The default comes from
+                       the shared registry in contracts.json and is
+                       the current contract,
+                       commonsv5.bindingvow1106.testnet. Naming a
+                       known-old contract (v1 to v4) makes the server
+                       refuse to start, because those contracts are
+                       history, watchable through the webapp and the
+                       exporter but no longer operated; set
+                       COMMONS_ALLOW_OLD_CONTRACT=1 to override for
+                       archaeology. On v5, rooms need at least 2
+                       seated feeders before they can start;
+                       registrations attempt that start automatically
                        once the quorum is seated, and
                        commons_create_room accepts the v4/v5 coverage
                        and refill arguments there.
@@ -56,9 +56,11 @@ the scheme implies a checkable effect. Errors are returned as
 {"ok": false, "error": ...} payloads, never swallowed.
 """
 
+import fcntl
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -71,8 +73,37 @@ from mcp.server.mcpserver import MCPServer
 
 # ---------------------------------------------------------------- config
 
+def _load_registry():
+    """The shared contract registry (contracts.json next to this
+    file) is the single address book for every Commons tool: this
+    server, the fleet watchdog, and the dataset exporter all read
+    their contract addresses from it. When the file is missing (a
+    partial checkout), the built-in mirror below is used instead;
+    keep the two in step."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "contracts.json")
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return {
+            "default": "commonsv5.bindingvow1106.testnet",
+            "known_old": [
+                "commons.bindingvow1106.testnet",
+                "commonsv2.bindingvow1106.testnet",
+                "commonsv3.bindingvow1106.testnet",
+                "commonsv4.bindingvow1106.testnet",
+            ],
+            "store_url":
+                "https://the-commons-store-ilkokorons-projects.vercel.app",
+        }
+
+
+REGISTRY = _load_registry()
 ACCOUNT = os.environ.get("COMMONS_ACCOUNT_ID", "")
-CONTRACT = os.environ.get("COMMONS_CONTRACT", "commons.bindingvow1106.testnet")
+CONTRACT = os.environ.get("COMMONS_CONTRACT", "") \
+    or REGISTRY.get("default", "commonsv5.bindingvow1106.testnet")
+CONTRACT_IS_OLD = CONTRACT in REGISTRY.get("known_old", [])
 NETWORK = os.environ.get("COMMONS_NETWORK", "testnet")
 RECORDS_DIR = os.path.expanduser(
     os.environ.get("COMMONS_RECORDS_DIR", "~/workspace/the-commons/records")
@@ -81,8 +112,15 @@ NEAR_CLI_ENV = os.environ.get("COMMONS_NEAR_CLI", "")
 NEAR_CLI_DEFAULT = os.path.expanduser(
     "~/tools/near-bin/near-cli-rs-x86_64-unknown-linux-gnu/near"
 )
-COMMIT_MIN_MARGIN_SECS = int(
-    os.environ.get("COMMONS_COMMIT_MIN_MARGIN_SECS", "45"))
+try:
+    COMMIT_MIN_MARGIN_SECS = int(
+        os.environ.get("COMMONS_COMMIT_MIN_MARGIN_SECS", "45"))
+    if COMMIT_MIN_MARGIN_SECS < 0:
+        raise ValueError("negative")
+except ValueError:
+    print("COMMONS_COMMIT_MIN_MARGIN_SECS is malformed; "
+          "falling back to 45", file=sys.stderr)
+    COMMIT_MIN_MARGIN_SECS = 45
 
 
 def _resolve_near_cli():
@@ -104,8 +142,29 @@ def _resolve_near_cli():
 
 
 NEAR_CLI, NEAR_CLI_SOURCE = _resolve_near_cli()
-STORE_URL = os.environ.get("COMMONS_STORE_URL", "").rstrip("/")
+# The platform record store is the default commit path (issue 6):
+# its URL is a platform constant from the registry, so a commit
+# publishes whenever a write token is configured, with no per-
+# operator URL setup. COMMONS_STORE_URL overrides it ("" disables).
+STORE_URL = os.environ.get(
+    "COMMONS_STORE_URL", REGISTRY.get("store_url", "")).rstrip("/")
 STORE_TOKEN = os.environ.get("COMMONS_STORE_TOKEN", "")
+
+
+def _store_url_valid(url):
+    if not url:
+        return False
+    if url.startswith("https://"):
+        return True
+    return url.startswith("http://localhost") or \
+        url.startswith("http://127.0.0.1")
+
+
+STORE_URL_VALID = _store_url_valid(STORE_URL)
+if STORE_URL and not STORE_URL_VALID:
+    print(f"COMMONS_STORE_URL {STORE_URL!r} is not an https URL; "
+          "the record store is treated as unconfigured",
+          file=sys.stderr)
 # Rotation for view reads. The third entry is the official archival
 # endpoint; it was verified live against a full 10-reveal epoch read
 # (exact bytes, correct totals) before being added. The Lava testnet
@@ -171,12 +230,18 @@ def _rpc_post_urllib(url, body, timeout):
         return resp.read()
 
 
+class _DeterministicRPC(RuntimeError):
+    """An RPC answer that retrying cannot change (the request itself
+    was rejected). Retrying those for minutes, as the old loop did,
+    only delays the real error."""
+
+
 def _rpc(method, params, timeout=25):
     payload = {"jsonrpc": "2.0", "id": "1", "method": method, "params": params}
     body = json.dumps(payload)
-    backoff = [1.2, 2.0, 3.2, 5.0, 8.0, 12.0, 12.0]
+    backoff = [0.8, 1.6, 3.0]
     last = None
-    for attempt in range(8):
+    for attempt in range(4):
         rpc = RPCS[attempt % len(RPCS)]
         try:
             if CURL:
@@ -185,8 +250,10 @@ def _rpc(method, params, timeout=25):
                 raw = _rpc_post_urllib(rpc, body.encode(), timeout)
             data = json.loads(raw)
             if "error" in data:
-                raise RuntimeError(f"RPC error: {data['error']}")
+                raise _DeterministicRPC(f"RPC error: {data['error']}")
             return data["result"]
+        except _DeterministicRPC:
+            raise
         except Exception as e:  # transient RPC failures are normal
             last = e
             if attempt < len(backoff):
@@ -195,6 +262,12 @@ def _rpc(method, params, timeout=25):
 
 
 def view(fn, args):
+    """Read one contract view. Strict by default: when the contract
+    side fails, the query result carries an "error" field instead of
+    return bytes, and that error is raised with the contract's own
+    text. The old lenient form indexed result["result"] blindly and
+    surfaced contract failures as a bare KeyError or, worse, as an
+    empty-looking result."""
     result = _rpc(
         "query",
         {
@@ -205,6 +278,8 @@ def view(fn, args):
             "args_base64": base64.b64encode(json.dumps(args).encode()).decode(),
         },
     )
+    if isinstance(result, dict) and result.get("error"):
+        raise RuntimeError(str(result["error"]))
     raw = bytes(result["result"])
     return json.loads(raw) if raw else None
 
@@ -238,15 +313,44 @@ def account_view(account):
     )
 
 
+_AMOUNT_RE = re.compile(r"^[0-9]+(\.[0-9]+)?$")
+
+
 def to_yocto(amount):
-    """Accept a NEAR decimal string ("0.005") or an integer yocto string."""
-    if isinstance(amount, (int,)):
-        return int(amount)
-    s = str(amount).strip()
+    """Strict amount parser for the tool boundary. Accepts exactly
+    two forms: a NEAR decimal string ("0.005", "12", "0.000000000000
+    000000000001" with at most 24 decimal places) or a non-negative
+    integer (already yocto). Everything else raises ValueError:
+    negative amounts (a leading "-" used to parse as a POSITIVE
+    amount, because int("-0") is 0), signs, exponents ("1e-3"),
+    floats (precision loss), empty or whitespace-padded strings
+    with internal spaces, and decimals longer than 24 places
+    (they used to be silently truncated). Amounts cross the tool
+    boundary as decimal NEAR strings; raw yocto appears only in
+    fields named *_yocto."""
+    if isinstance(amount, bool):
+        raise ValueError(f"invalid amount: {amount!r}")
+    if isinstance(amount, int):
+        if amount < 0:
+            raise ValueError(f"negative amount: {amount!r}")
+        return amount
+    if not isinstance(amount, str):
+        raise ValueError(
+            f"amount must be a NEAR decimal string or yocto integer, "
+            f"got {type(amount).__name__}: {amount!r}")
+    s = amount.strip()
+    if not _AMOUNT_RE.match(s):
+        raise ValueError(
+            f"invalid amount {amount!r}: expected a NEAR decimal "
+            "string like \"0.005\" (no sign, no exponent) or an "
+            "integer yocto string")
     if "." in s:
         whole, _, frac = s.partition(".")
-        frac = (frac + "0" * 24)[:24]
-        return int(whole or "0") * YOCTO + int(frac or "0")
+        if len(frac) > 24:
+            raise ValueError(
+                f"invalid amount {amount!r}: more than 24 decimal "
+                "places; yocto is the smallest unit")
+        return int(whole) * YOCTO + int(frac.ljust(24, "0"))
     return int(s)
 
 
@@ -329,6 +433,18 @@ def near_call(fn, args, deposit_yocto=0):
     ]
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        # A timeout is NOT "not sent" (B3): the CLI may already have
+        # broadcast the transaction. Report the outcome as unknown
+        # so callers keep their recovery data and check the chain
+        # instead of blindly retrying.
+        return {"ok": False, "near_cli": NEAR_CLI, "verified": False,
+                "outcome_unknown": True,
+                "error": "near CLI timed out after 180s; the "
+                         "transaction may or may not have been "
+                         "broadcast. Do NOT retry blindly: read the "
+                         "chain state back first to see whether it "
+                         "landed."}
     except Exception as e:
         return {"ok": False, "near_cli": NEAR_CLI,
                 "error": f"near CLI failed to run ({NEAR_CLI}, resolved "
@@ -354,12 +470,15 @@ def near_call(fn, args, deposit_yocto=0):
             time.sleep(2)
     else:
         return {"ok": False, "tx_id": tx_id, "near_cli": NEAR_CLI,
+                "verified": False, "outcome_unknown": True,
                 "error": f"could not read back transaction outcome: {last}"}
     if not outcome["executed"]:
         return {"ok": False, "tx_id": tx_id, "near_cli": NEAR_CLI,
+                "verified": True,
                 "error": f"transaction executed but failed on chain: "
                          f"{json.dumps(outcome['failure'])[:600]}"}
     return {"ok": True, "tx_id": tx_id, "near_cli": NEAR_CLI,
+            "verified": True,
             "return_value": outcome["return_value"]}
 
 
@@ -374,6 +493,8 @@ def _store_upload(canonical, expected_hash):
     which is exactly the reasoning hash anchored on chain, so a
     successful upload makes the record certifiable by anyone holding
     read access to the store. Returns (ok, content_id, error)."""
+    if not STORE_URL_VALID:
+        return False, None, f"store URL is not a valid https URL: {STORE_URL!r}"
     try:
         req = urllib.request.Request(
             STORE_URL + "/api/records",
@@ -382,7 +503,15 @@ def _store_upload(canonical, expected_hash):
             headers={"Content-Type": "application/json",
                      "Authorization": f"Bearer {STORE_TOKEN}"},
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        # Never follow a redirect on this POST: a redirect would
+        # re-send the request, bearer token included, to wherever
+        # the redirect points. A 3xx from the store is a failure.
+        class _NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers,
+                                 newurl):
+                return None
+        opener = urllib.request.build_opener(_NoRedirect)
+        with opener.open(req, timeout=30) as resp:
             out = json.loads(resp.read())
         cid = out.get("id") or out.get("log_ref")
         if not out.get("ok") or cid != expected_hash:
@@ -399,11 +528,52 @@ def _state_path():
     return os.path.join(RECORDS_DIR, f".mcp-pending-{safe}.json")
 
 
+PENDING_WARNING = None
+
+
+class _PendingLock:
+    """Exclusive lock around pending-store read-modify-write cycles.
+    Two server processes for the same account (an MCP client session
+    and a one-shot client, say) must not interleave their updates."""
+
+    def __enter__(self):
+        self._f = open(_state_path() + ".lock", "a+")
+        fcntl.flock(self._f, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        fcntl.flock(self._f, fcntl.LOCK_UN)
+        self._f.close()
+        return False
+
+
 def _load_pending():
+    """Load the pending store. A missing file is an empty store. A
+    CORRUPT file is never silently reset (the old behaviour dropped
+    every unrevealed commitment without a trace): the file is moved
+    aside with a .corrupt-<timestamp> suffix, PENDING_WARNING is set
+    so status and commit results can surface it, and an empty store
+    is returned."""
+    global PENDING_WARNING
+    path = _state_path()
     try:
-        with open(_state_path()) as f:
-            return json.load(f)
-    except Exception:
+        with open(path) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        aside = f"{path}.corrupt-{int(time.time())}"
+        try:
+            os.replace(path, aside)
+        except Exception:
+            aside = path
+        PENDING_WARNING = (
+            f"pending store was corrupt ({e}); moved aside to "
+            f"{aside}. Unrevealed commitments in it need the "
+            "explicit reveal flow with the values commons_commit "
+            "returned.")
+        print(PENDING_WARNING, file=sys.stderr)
         return {}
 
 
@@ -415,8 +585,18 @@ def _save_pending(state):
     os.replace(tmp, path)
 
 
-def _pending_key(room_id, epoch):
-    return f"{room_id}:{epoch}"
+def _find_pending(state, room_id, epoch):
+    """Pending entries are keyed by commitment hash (one store per
+    commit, B2); the entry for a room and epoch is found by scanning
+    the values. Entries written by older versions carry the same
+    fields, so they are found too. Returns (key, entry) or
+    (None, None)."""
+    for key, entry in state.items():
+        if isinstance(entry, dict) \
+                and entry.get("room_id") == room_id \
+                and entry.get("epoch") == epoch:
+            return key, entry
+    return None, None
 
 
 # ---------------------------------------------------------------- tools: read
@@ -432,11 +612,14 @@ def commons_status() -> dict:
         "contract": CONTRACT,
         "network": NETWORK,
         "records_dir": RECORDS_DIR,
-        "record_store_configured": bool(STORE_URL and STORE_TOKEN),
+        "record_store_configured": bool(STORE_URL and STORE_TOKEN and STORE_URL_VALID),
         "record_store_url": STORE_URL or None,
         "near_cli": NEAR_CLI,
         "near_cli_source": NEAR_CLI_SOURCE,
+        "contract_is_old": CONTRACT_IS_OLD,
     }
+    if PENDING_WARNING:
+        out["pending_store_warning"] = PENDING_WARNING
     try:
         out["config"] = view("get_config", {})
     except Exception as e:
@@ -545,7 +728,7 @@ def commons_get_epoch(room_id: int, epoch: int) -> dict:
 
 @server.tool()
 def commons_get_profile(account_id: str = "") -> dict:
-    """Contract v2 only: read an account's display profile
+    """Contract v2 and later: read an account's display profile
     (display_name, bio, social). Defaults to the configured account
     when account_id is omitted. Returns profile null when the account
     has never set one. Profiles are display metadata only; they carry
@@ -674,17 +857,41 @@ def commons_create_room(
     if v45:
         res["coverage"] = cov
         res["refill_mode"] = rm
+    # The room id comes from the create transaction's own return
+    # value (B6). The old rooms_created-minus-one derivation raced
+    # with any other sponsor creating a room in between and could
+    # attach the read-back to a stranger's room; it survives only
+    # as a fallback for contracts that return nothing.
+    rv = res.get("return_value")
+    if isinstance(rv, int):
+        new_id = rv
+        res["room_id_source"] = "transaction return value"
+    else:
+        try:
+            cfg2 = view("get_config", {})
+            new_id = int(cfg2["rooms_created"]) - 1
+            res["room_id_source"] = "rooms_created - 1 (fallback)"
+        except Exception as e:
+            res["ok"] = False
+            res["verified"] = False
+            res["error"] = f"room created (tx {res.get('tx_id')}) but " \
+                           f"its id could not be determined: {e}"
+            return res
+    res["room_id"] = new_id
     try:
-        cfg2 = view("get_config", {})
-        new_id = int(cfg2["rooms_created"]) - 1
         room = view("get_room", {"room_id": new_id})
-        res["room_id"] = new_id
         res["room"] = room
         if not room or room["sponsor"] != ACCOUNT:
             res["ok"] = False
+            res["verified"] = False
             res["error"] = "read-back mismatch: new room not found under sponsor"
+        else:
+            res["verified"] = True
     except Exception as e:
-        res["readback_error"] = str(e)
+        res["ok"] = False
+        res["verified"] = False
+        res["error"] = f"verification failed: could not read the new " \
+                       f"room back: {e}"
     return res
 
 
@@ -713,9 +920,14 @@ def commons_start_room(room_id: int) -> dict:
         res["room"] = room
         if not room or not room.get("started"):
             res["ok"] = False
+            res["verified"] = False
             res["error"] = "read-back mismatch: room not started after start_room"
+        else:
+            res["verified"] = True
     except Exception as e:
-        res["readback_error"] = str(e)
+        res["ok"] = False
+        res["verified"] = False
+        res["error"] = f"verification failed: {e}"
     return res
 
 
@@ -739,9 +951,14 @@ def _register(room_id, fn, role):
         res["agent"] = agent
         if not agent or agent["role"] != role:
             res["ok"] = False
+            res["verified"] = False
             res["error"] = f"read-back mismatch: expected role {role}"
+        else:
+            res["verified"] = True
     except Exception as e:
-        res["readback_error"] = str(e)
+        res["ok"] = False
+        res["verified"] = False
+        res["error"] = f"verification failed: {e}"
     if res["ok"]:
         _maybe_auto_start(res, room_id)
     return res
@@ -868,10 +1085,16 @@ def commons_commit(
         }
         canonical = json.dumps(record, separators=(",", ":"), ensure_ascii=False)
         reasoning_hash = hashlib.sha256(canonical.encode()).hexdigest()
-        fname = f"room{room_id}-epoch{epoch}-{ACCOUNT}.json"
+        # The local record file is content-addressed (B2): its name
+        # is the record's own sha256, the same id the store uses and
+        # the hash anchored on chain, so a local copy is verifiable
+        # against the chain with no index. Written atomically.
+        fname = f"{reasoning_hash}.json"
         fpath = os.path.join(RECORDS_DIR, fname)
-        with open(fpath, "w") as f:
+        tmp = fpath + ".tmp"
+        with open(tmp, "w") as f:
             f.write(canonical)
+        os.replace(tmp, fpath)
         log_ref = fname
         record_status = {
             "record_store": "local-only",
@@ -883,7 +1106,7 @@ def commons_commit(
                 "platform record store to publish reasoning records."
             ),
         }
-        if STORE_URL and STORE_TOKEN:
+        if STORE_URL and STORE_TOKEN and STORE_URL_VALID:
             up_ok, up_id, up_err = _store_upload(canonical, reasoning_hash)
             if up_ok:
                 log_ref = up_id
@@ -902,38 +1125,72 @@ def commons_commit(
         ).hexdigest()
     except Exception as e:
         return err(f"commit preparation failed: {e}")
+    # Margin recheck (B4): the phase margin was first checked
+    # before the record was built, written and uploaded, which can
+    # take seconds. It is checked again against a fresh read, here,
+    # immediately before the broadcast, because this is the check
+    # that actually protects the commit from landing in the reveal
+    # phase.
+    try:
+        fresh = view("current_epoch", {"room_id": room_id})
+        if fresh["season_over"] or fresh["phase"] != "commit" \
+                or int(fresh["epoch"]) != epoch:
+            return err("the commit phase moved on while the record "
+                       "was being prepared; not broadcasting. Retry "
+                       "in the next commit phase.")
+        remaining = half - int(fresh.get("seconds_into_epoch", 0))
+        if remaining < COMMIT_MIN_MARGIN_SECS:
+            return err(f"only {remaining}s left in the commit phase "
+                       f"of epoch {epoch} at broadcast time (safety "
+                       f"margin {COMMIT_MIN_MARGIN_SECS}s); not "
+                       "broadcasting, the commit would likely land "
+                       "in the reveal phase and be rejected on chain.")
+    except Exception as e:
+        return err(f"pre-broadcast phase recheck failed: {e}")
     # Persist the pending reveal data BEFORE broadcasting the commit
-    # transaction (atomic write in _save_pending). A crash anywhere
-    # after this point, including inside the broadcast itself, can no
-    # longer strand a paid commitment: the reveal data already exists
-    # on disk. If the transaction is read back as executed-but-failed,
-    # or never produced a transaction id at all, the entry is rolled
-    # back so a dead commitment is never mistaken for a live one. If
-    # the outcome cannot be read back, the entry stays: the commit may
-    # have landed, and the reveal data must survive.
-    state = _load_pending()
-    pkey = _pending_key(room_id, epoch)
-    had_prev = pkey in state
-    prev_entry = state.get(pkey)
-    state[pkey] = {
-        "room_id": room_id, "epoch": epoch, "amount": str(amount_y),
-        "reasoning_hash": reasoning_hash, "log_ref": log_ref, "salt": salt,
-        "commitment": commitment, "revealed": False,
+    # transaction, in the store keyed by the commitment hash (B2),
+    # under the pending lock. A crash anywhere after this point,
+    # including inside the broadcast itself, can no longer strand a
+    # paid commitment. If the transaction is read back as executed-
+    # but-failed, or provably never broadcast, the entry is rolled
+    # back. If the outcome is UNKNOWN (B3: CLI timeout or an unread-
+    # able outcome), the entry stays and the result carries the full
+    # reveal triple, so the reveal can be recovered manually.
+    triple = {
+        "amount_yocto": str(amount_y), "amount_near": near_str(amount_y),
+        "reasoning_hash": reasoning_hash, "salt": salt,
+        "log_ref": log_ref, "commitment": commitment,
     }
-    _save_pending(state)
+    with _PendingLock():
+        state = _load_pending()
+        prev_key, prev_entry = _find_pending(state, room_id, epoch)
+        state[commitment] = {
+            "room_id": room_id, "epoch": epoch, "amount": str(amount_y),
+            "reasoning_hash": reasoning_hash, "log_ref": log_ref,
+            "salt": salt, "commitment": commitment, "revealed": False,
+        }
+        _save_pending(state)
     res = near_call("commit", {"room_id": room_id, "commitment": commitment})
     res.update(record_status)
     if not res["ok"]:
-        dead = ("tx_id" not in res
-                or "transaction executed but failed on chain"
-                in res.get("error", ""))
-        if dead:
-            state = _load_pending()
-            if had_prev:
-                state[pkey] = prev_entry
-            else:
-                state.pop(pkey, None)
-            _save_pending(state)
+        failed_on_chain = "transaction executed but failed on chain" \
+            in res.get("error", "")
+        never_sent = ("tx_id" not in res
+                      and not res.get("outcome_unknown"))
+        if failed_on_chain or never_sent:
+            with _PendingLock():
+                state = _load_pending()
+                state.pop(commitment, None)
+                if prev_entry is not None:
+                    state[prev_entry["commitment"]] = prev_entry
+                _save_pending(state)
+        else:
+            res["reveal_triple"] = triple
+            res["recovery_note"] = (
+                "the commit outcome is unknown; the pending entry "
+                "was kept and this reveal triple is everything "
+                "commons_reveal needs if the commit did land. Check "
+                "the chain before committing again.")
         return res
     res.update({
         "epoch": epoch, "commitment": commitment,
@@ -979,9 +1236,22 @@ def commons_reveal(
         return err(f"epoch {info['epoch']} is in {info['phase']} phase, "
                    "not reveal phase")
     epoch = int(info["epoch"])
+    # Reveal gets the same phase margin as commit (B4): a reveal
+    # broadcast in the last seconds of the epoch would land after
+    # the epoch ends and be rejected on chain.
+    try:
+        room = view("get_room", {"room_id": room_id})
+        remaining = int(room["epoch_secs"]) \
+            - int(info.get("seconds_into_epoch", 0))
+        if remaining < COMMIT_MIN_MARGIN_SECS:
+            return err(f"only {remaining}s left in epoch {epoch} "
+                       f"(safety margin {COMMIT_MIN_MARGIN_SECS}s); "
+                       "a reveal sent now would likely land after "
+                       "the epoch ends and be rejected on chain.")
+    except Exception as e:
+        return err(f"reveal margin check failed: {e}")
     state = _load_pending()
-    key = _pending_key(room_id, epoch)
-    pending = state.get(key)
+    key, pending = _find_pending(state, room_id, epoch)
     if pending is not None and pending.get("revealed"):
         return err("this commitment was already revealed")
     given = [bool(amount), bool(reasoning_hash), bool(salt)]
@@ -1024,8 +1294,10 @@ def commons_reveal(
     if not res["ok"]:
         return res
     entry["revealed"] = True
-    state[key] = entry
-    _save_pending(state)
+    with _PendingLock():
+        state = _load_pending()
+        state[entry["commitment"]] = entry
+        _save_pending(state)
     res.update({"epoch": epoch, "amount": entry["amount"],
                 "amount_yocto": entry["amount"],
                 "amount_near": near_str(int(entry["amount"])),
@@ -1046,9 +1318,14 @@ def commons_settle(room_id: int, epoch: int) -> dict:
         res["epoch_record"] = rec
         if rec is None:
             res["ok"] = False
+            res["verified"] = False
             res["error"] = "read-back mismatch: epoch record missing after settle"
+        else:
+            res["verified"] = True
     except Exception as e:
-        res["readback_error"] = str(e)
+        res["ok"] = False
+        res["verified"] = False
+        res["error"] = f"verification failed: {e}"
     return res
 
 
@@ -1065,8 +1342,11 @@ def commons_exit_room(room_id: int) -> dict:
             "get_agent", {"room_id": room_id, "account": ACCOUNT})
         room = view("get_room", {"room_id": room_id})
         res["room_after"] = room
+        res["verified"] = True
     except Exception as e:
-        res["readback_error"] = str(e)
+        res["ok"] = False
+        res["verified"] = False
+        res["error"] = f"verification failed: {e}"
     return res
 
 
@@ -1082,8 +1362,11 @@ def commons_report_abuse(room_id: int, target: str, evidence_hash: str) -> dict:
         res["report_id"] = res["return_value"]
         try:
             res["report"] = view("get_report", {"report_id": res["report_id"]})
+            res["verified"] = True
         except Exception as e:
-            res["readback_error"] = str(e)
+            res["ok"] = False
+            res["verified"] = False
+            res["error"] = f"verification failed: {e}"
     return res
 
 
@@ -1097,8 +1380,11 @@ def commons_confirm_report(report_id: int) -> dict:
         return res
     try:
         res["report"] = view("get_report", {"report_id": report_id})
+        res["verified"] = True
     except Exception as e:
-        res["readback_error"] = str(e)
+        res["ok"] = False
+        res["verified"] = False
+        res["error"] = f"verification failed: {e}"
     return res
 
 
@@ -1115,9 +1401,14 @@ def commons_finalize_room(room_id: int) -> dict:
         res["room"] = room
         if room and not room["ended"]:
             res["ok"] = False
+            res["verified"] = False
             res["error"] = "read-back mismatch: room not ended after finalize"
+        elif room:
+            res["verified"] = True
     except Exception as e:
-        res["readback_error"] = str(e)
+        res["ok"] = False
+        res["verified"] = False
+        res["error"] = f"verification failed: {e}"
     return res
 
 
@@ -1130,14 +1421,17 @@ def commons_withdraw_residue(room_id: int) -> dict:
         return res
     try:
         res["room_after"] = view("get_room", {"room_id": room_id})
+        res["verified"] = True
     except Exception as e:
-        res["readback_error"] = str(e)
+        res["ok"] = False
+        res["verified"] = False
+        res["error"] = f"verification failed: {e}"
     return res
 
 
 @server.tool()
 def commons_set_profile(display_name: str, bio: str, social: str) -> dict:
-    """Contract v2 only: set (or overwrite) the display profile of the
+    """Contract v2 and later: set (or overwrite) the display profile of the
     configured account: a display name (max 64 chars), a bio (max 160
     chars) and a social handle (max 64 chars). Profiles are display
     metadata keyed by account; interfaces read them with
@@ -1158,9 +1452,14 @@ def commons_set_profile(display_name: str, bio: str, social: str) -> dict:
                 or profile.get("bio") != bio
                 or profile.get("social") != social):
             res["ok"] = False
+            res["verified"] = False
             res["error"] = "read-back mismatch: profile not stored as sent"
+        else:
+            res["verified"] = True
     except Exception as e:
-        res["readback_error"] = str(e)
+        res["ok"] = False
+        res["verified"] = False
+        res["error"] = f"verification failed: {e}"
     return res
 
 
@@ -1168,4 +1467,12 @@ if __name__ == "__main__":
     if NETWORK != "testnet":
         print("COMMONS_NETWORK must be testnet", file=sys.stderr)
         sys.exit(1)
+    if CONTRACT_IS_OLD and not os.environ.get("COMMONS_ALLOW_OLD_CONTRACT"):
+        print(f"COMMONS_CONTRACT names the known-old contract "
+              f"{CONTRACT}; this server operates the current contract "
+              f"({REGISTRY.get('default')}) by default. Old seasons "
+              "stay readable through the webapp and the dataset "
+              "exporter. Set COMMONS_ALLOW_OLD_CONTRACT=1 to run "
+              "against it anyway.", file=sys.stderr)
+        sys.exit(2)
     server.run(transport="stdio")
