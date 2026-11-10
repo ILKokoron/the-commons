@@ -2789,23 +2789,35 @@ function loadAgentsAndProfiles(room){
     if(rep.room_id === room.id){ seen[rep.reporter] = true; seen[rep.target] = true; }
   });
   var accts = Object.keys(seen);
-  var jobs = accts.map(function(acct){
-    var map = state.agentsByRoom[room.id] || (state.agentsByRoom[room.id] = {});
-    if(map[acct]) return Promise.resolve();
-    return rpcRetryC(roomContract(room), "get_agent", {room_id: roomCid(room), account: acct}, 3).then(function(view){
-      if(view) map[acct] = view;
-    }).catch(function(){});
-  });
+  var map = state.agentsByRoom[room.id] || (state.agentsByRoom[room.id] = {});
+  /* Probes run in small sequential batches: one wide parallel burst
+     is the first thing throttled mirrors drop, and a dead burst used
+     to leave the participants table empty for the whole session. */
+  var steps = [];
+  for(var bi = 0; bi < accts.length; bi += 6){
+    (function(batch){
+      steps.push(function(){
+        return Promise.all(batch.map(function(acct){
+          if(map[acct]) return Promise.resolve();
+          return rpcRetryC(roomContract(room), "get_agent", {room_id: roomCid(room), account: acct}, 3).then(function(view){
+            if(view) map[acct] = view;
+          }).catch(function(){});
+        }));
+      });
+    })(accts.slice(bi, bi + 6));
+  }
   var profJobs = accts.filter(function(acct){ return !state.profileTried[acct]; }).map(function(acct){
     state.profileTried[acct] = true;
     return rpcSoftC(V2, "get_profile", {account: acct}).then(function(p){
       if(p && p.display_name) state.profiles[acct] = p;
     });
   });
-  return Promise.all(jobs.concat(profJobs)).then(function(){ state.agentsLoadedByRoom[room.id] = true; renderAll(); snapSave(); });
+  var chain = Promise.resolve();
+  steps.forEach(function(step){ chain = chain.then(step); });
+  return Promise.all([chain, Promise.all(profJobs)]).then(function(){ state.agentsLoadedByRoom[room.id] = true; renderAll(); snapSave(); });
 }
 function selectRoom(id){
-  if(state.selected === id) { renderAll(); return; }
+  if(state.selected === id) { renderAll(); loadRoomEpochs(id, true).then(function(){ loadAgentsAndProfiles(selectedRoom()); }); return; }
   state.selected = id;
   stopReplayPlay();
   state.replay.roomId = null;
@@ -2825,7 +2837,12 @@ function refresh(){
     rpcRetryC(S5, "get_config", {}, 3).then(function(c){ if(c) state.cfg5 = c; }).catch(function(){})
   ];
   return Promise.all(cfgJobs).then(function(){
-    return rpc("list_rooms", {from_index:0, limit:50});
+    /* A throttled list_rooms read must not kill the whole refresh:
+       fall back to the rooms already on screen so the rest of the
+       cycle (epochs, agents, boards) still runs. */
+    return rpc("list_rooms", {from_index:0, limit:50}).catch(function(){
+      return (state.rooms || []).filter(function(x){ return roomContract(x) === CONTRACT; });
+    });
   }).then(function(rooms){
     var merged = (rooms || []).map(function(r){ r.contract = CONTRACT; r.cid = r.id; return r; });
     var prevV5 = (state.rooms || []).filter(function(x){ return x.contract === S5; });
@@ -2864,6 +2881,7 @@ function refresh(){
       }
       if(state.selected != null && !state.rooms.some(function(r){ return r.id===state.selected; }) && state.rooms.length)
         state.selected = state.rooms[0].id;
+      loadAgentsAndProfiles(selectedRoom());
       loadGlobalBoard();
       return scanReports().then(function(){ return loadRoomEpochs(state.selected, true); });
     });
