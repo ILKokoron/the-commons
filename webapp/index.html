@@ -1376,6 +1376,8 @@ function liveRoom(){
   if(ticking.length) return ticking[ticking.length - 1];
   var alive = state.rooms.filter(seasonAlive);
   if(alive.length) return alive[alive.length - 1];
+  var nonRec = state.rooms.filter(function(r){ return !isRecruiting(r); });
+  if(nonRec.length) return nonRec[nonRec.length - 1];
   if(state.rooms.length) return state.rooms[state.rooms.length - 1];
   return null;
 }
@@ -1858,7 +1860,7 @@ function renderOverview(){
     setText("ov-epoch-sub", "Live room · " + (lr.name || ("Room " + dispId(lr))));
     setText("ov-pool-name", "Live pool · " + (lr.name || ("Room " + dispId(lr))));
     var tag = $("ov-pool-tag");
-    if(tag){ tag.outerHTML = stateTag(lr).replace('class="tag"', 'class="tag" id="ov-pool-tag"'); }
+    if(tag){ tag.outerHTML = stateTag(lr).replace('<span ', '<span id="ov-pool-tag" '); }
     setNum("ov-pool-big", fmtNear(lr.pool_balance));
     var pool = big(lr.pool_balance), res = big(lr.refill_reserve), tot = pool + res;
     var pw = tot > 0n ? ratioOf(pool, tot) * 100 : 0;
@@ -1948,7 +1950,9 @@ function renderRoomDetail(){
   setText("rd-eyebrow", "Workspace / Room detail · Room " + dispId(r));
   setText("rd-name", r.name || ("Room " + dispId(r)));
   var phase;
-  if(roomFinished(r)){
+  if(isRecruiting(r)){
+    phase = seatsLine(r) + ". The seed sits escrowed in the contract and the season clock has not started.";
+  } else if(roomFinished(r)){
     phase = "The season is over. " + r.next_epoch_to_settle + " epochs settled, " + fmtNear(r.total_paid_out) + " NEAR paid out, and the record below is final.";
   } else if(cur){
     phase = "The season is alive: epoch " + Math.min(cur.epoch, r.season_epochs) + " of " + r.season_epochs + ", in its " + cur.phase + " phase, with " + r.next_epoch_to_settle + " epochs settled so far.";
@@ -1957,7 +1961,7 @@ function renderRoomDetail(){
   }
   setText("rd-intro", phase);
   var st = $("rd-state");
-  if(st) st.outerHTML = stateTag(r).replace('class="tag"', 'class="tag" id="rd-state"');
+  if(st) st.outerHTML = stateTag(r).replace('<span ', '<span id="rd-state" ');
   setText("rd-pool", fmtNear(r.pool_balance));
   setText("rd-feeders", String(r.feeders_count));
   setText("rd-feeders-sub", "Seated of " + r.capacity + " capacity");
@@ -1972,7 +1976,7 @@ function renderRoomDetail(){
     + '<div class="kv"><span>Season length</span><b>' + r.season_epochs + ' epochs</b></div>'
     + '<div class="kv"><span>Seed (derived)</span><b>' + fmtNear(seed.toString()) + ' NEAR</b></div>'
     + '<div class="kv"><span>Data exclusivity until</span><b>' + fmtDateNs(r.data_exclusivity_until_ns) + '</b></div>'
-    + '<div class="kv"><span>Contract</span><b>' + acctLinkFull(CONTRACT) + '</b></div>');
+    + '<div class="kv"><span>Contract</span><b>' + acctLinkFull(roomContract(r)) + '</b></div>');
   setText("rd-poolbig", fmtNear(r.pool_balance));
   var pool = big(r.pool_balance), res = big(r.refill_reserve), tot = pool + res;
   var pw = tot > 0n ? ratioOf(pool, tot) * 100 : 0;
@@ -2823,7 +2827,8 @@ function refresh(){
   return Promise.all(cfgJobs).then(function(){
     return rpc("list_rooms", {from_index:0, limit:50});
   }).then(function(rooms){
-    state.rooms = (rooms || []).map(function(r){ r.contract = CONTRACT; r.cid = r.id; return r; });
+    var merged = (rooms || []).map(function(r){ r.contract = CONTRACT; r.cid = r.id; return r; });
+    var prevV5 = (state.rooms || []).filter(function(x){ return x.contract === S5; });
     /* The observatory also watches the current contract (v5), so a room
        is visible from recruiting on, not only once its season runs.
        v5 rooms carry their contract and contract-local id; their app id
@@ -2833,9 +2838,11 @@ function refresh(){
       (v5rooms || []).forEach(function(r){
         if(r.cancelled) return;
         r.contract = S5; r.cid = r.id; r.id = 1000 + r.id;
-        state.rooms.push(r);
+        merged.push(r);
       });
-    }).catch(function(){});
+    }).catch(function(){
+      prevV5.forEach(function(r){ merged.push(r); });
+    }).then(function(){ state.rooms = merged; });
   }).then(function(){
     state.roomsLoaded = true;
     /* current_epoch goes through rpcRetry (all three mirrors with
