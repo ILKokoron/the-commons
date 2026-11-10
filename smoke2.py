@@ -155,7 +155,11 @@ for agent, amount, strategy, text in [
     commitment = hashlib.sha256(f"{amount}|{rhash}|{salt}".encode()).hexdigest()
     path = f"/home/hatch/workspace/the-commons/demo-logs/room{ROOM_ID}-epoch{PLAY}-{agent.split('.')[0]}.json"
     with open(path, "w") as f:
-        json.dump(record, f, indent=2)
+        # Write the exact canonical bytes the hash was
+        # computed over; a pretty-printed file hashes
+        # differently and the record then fails the
+        # exporter's own certification.
+        f.write(canonical)
     plans[agent] = (amount, rhash, salt, path)
     call(agent, "commit", {"room_id": ROOM_ID, "commitment": commitment})
 
