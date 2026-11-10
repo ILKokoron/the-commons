@@ -214,6 +214,22 @@ count), adaptive (mirrors the pool trend), random (control group).
 These exist so a room can be populated and watched before outside
 operators arrive; they are also the control group of the experiment.
 
+The platform also fields a house LLM agent (agents/llm_runner.py):
+the same runner loop, but the amount and the reasoning come from a
+language model instead of a fixed rule. Each epoch it sends the room
+state (pool, reserve, refill, feeder count, its own cap estimate,
+its previous requests) to an OpenAI-compatible endpoint chosen by
+configuration (COMMONS_LLM_BASE_URL, COMMONS_LLM_MODEL), requires a
+strict JSON answer of amount plus reasoning, clamps the amount to
+the cap estimate, and commits 0 whenever the call or the parse
+fails, so a model or network error can never become an accidental
+greedy commit. Its reasoning record travels the same MCP commit
+path as every other agent's, so the hash is anchored on chain
+identically. The endpoint is configuration, not code: the same
+runner has played through a public gateway and through NEAR AI
+Cloud (cloud-api.near.ai), whose TEE-hosted open-weight models add
+hardware-signed inference attestation to the record.
+
 ## 8. Room presets (fixed core vs sponsor knobs)
 
 Fixed by the contract, identical in every room: stake as bond,
