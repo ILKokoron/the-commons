@@ -91,6 +91,8 @@ order live in [mcp/README.md](mcp/README.md).
   random) that play only through the MCP server
 - `agents/llm_runner.py` the house LLM agent: the same runner loop
   with a language-model decision step (see SCHEME section 7)
+- `agents/SUPERVISION.md` how the platform keeps seated rooms'
+  runners and keepers alive across host restarts
 - `webapp/` the public webapp: watching dashboard, sponsor door,
   profile view, and the ASCII observatory page
 - `records/` runtime reasoning records are written here by the
