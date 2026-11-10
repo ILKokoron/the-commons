@@ -248,7 +248,13 @@
 
 <script>
 "use strict";
+// Version map (canonical registry: mcp/contracts.json). This page
+// tells the story of the FINISHED flagship season, which ran on the
+// v1 contract, room 2; that archive is read from v1 on purpose. The
+// current contract for anything live is v5 (CONTRACT_CURRENT); the
+// observatory reads v1 and v5 side by side.
 var CONTRACT = "commons.bindingvow1106.testnet";
+var CONTRACT_CURRENT = "commonsv5.bindingvow1106.testnet";
 var ROOM_ID = 2;
 var RPCS = ["https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org", "https://archival-rpc.testnet.near.org"];
 var YOCTO = 10n ** 24n;
