@@ -277,7 +277,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
     <button data-page="sponsor"><span class="ico">＋</span>Create a room</button>
     <button data-page="protocol"><span class="ico">⌘</span>Protocol & MCP</button>
   </nav>
-  <div class="side-bottom"><div class="network"><i class="pulse"></i> NEAR TESTNET</div><p>Watch · <a href="https://testnet.nearblocks.io/address/commons.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">commons.bindingvow1106.testnet</a><br>Sponsor · <a href="https://testnet.nearblocks.io/address/commonsv5.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">commonsv5.bindingvow1106.testnet</a></p></div>
+  <div class="side-bottom"><div class="network"><i class="pulse"></i> NEAR TESTNET</div><p>Watch · <a href="https://testnet.nearblocks.io/address/commons.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">commons.bindingvow1106.testnet</a><br>Sponsor · <a href="https://testnet.nearblocks.io/address/commonsv6.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">commonsv6.bindingvow1106.testnet</a></p></div>
 </aside>
 <div class="main">
   <header class="topbar"><div class="crumb" id="crumb">Workspace / Overview</div><div class="top-right"><span class="testnet" id="liveStatus">● READING CHAIN</span><span class="testnet" id="snapNote" style="display:none"></span><button class="btn" id="btnTheme" type="button">Dark mode</button><button class="btn primary" id="btnWalletTop" type="button">Connect wallet</button><span class="avatar-top">C</span></div></header>
@@ -351,7 +351,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
     <div class="grid g4"><div class="metric"><label>Initial pool</label><strong>20%</strong><small>Of seed deposit, set in the contract</small></div><div class="metric"><label>Refill reserve</label><strong>80%</strong><small>Of seed deposit, set in the contract</small></div><div class="metric"><label>Exit tax</label><strong id="ec-tax">-</strong><small>Of feeder stake, from live config</small></div><div class="metric"><label>Abuse slash</label><strong id="ec-slash">-</strong><small>Of feeder stake, from live config</small></div></div>
     <div class="panel" style="margin-top:10px"><div class="panel-title"><div><h2>Where the seed sits now</h2></div><span class="tag" id="ec-flow-tag">Live room</span></div><div id="ec-flow"><div class="kv"><span>Status</span><b>Reading</b></div></div></div>
     <div class="split"><div class="panel"><div class="panel-title"><div><h2>Watch contract config</h2><p><a href="https://testnet.nearblocks.io/address/commons.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">commons.bindingvow1106.testnet</a></p></div></div><div id="ec-cfg1"><div class="kv"><span>Status</span><b>Reading</b></div></div></div>
-      <div class="panel"><div class="panel-title"><div><h2>Sponsor contract config</h2><p><a href="https://testnet.nearblocks.io/address/commonsv5.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">commonsv5.bindingvow1106.testnet</a></p></div></div><div id="ec-cfg3"><div class="kv"><span>Status</span><b>Reading</b></div></div></div></div>
+      <div class="panel"><div class="panel-title"><div><h2>Sponsor contract config</h2><p><a href="https://testnet.nearblocks.io/address/commonsv6.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">commonsv6.bindingvow1106.testnet</a></p></div></div><div id="ec-cfg3"><div class="kv"><span>Status</span><b>Reading</b></div></div></div></div>
     <div class="panel" style="margin-top:10px"><div class="panel-title"><div><h2>Payment ledger</h2></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Who pays</th><th>Process</th><th>Amount</th></tr></thead><tbody id="ec-ledger"><tr><td>Reading configs</td><td></td><td></td></tr></tbody></table></div></div>
     <div class="notice" style="margin-top:10px">The sponsor is intentionally net-negative in NEAR under the current design: they pay to run the season and obtain the dataset. No dataset licensing or revenue-share mechanism exists in the contracts.</div>
   </section>
@@ -389,7 +389,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
       <div class="field"><label>Cap per feeder per epoch (percent of pool snapshot)</label><input id="fCapPct" type="text" inputmode="decimal" value="10"><div class="hintline" id="capBpsHint">= 1000 bps</div></div>
       <div class="field"><label>Epoch length (seconds)</label><input id="fEpochSecs" type="number" min="10" step="1" value="600"><div class="hintline">Half commit, half reveal.</div></div>
       <div class="field"><label>Season length (epochs)</label><input id="fSeasonEpochs" type="number" min="1" step="1" value="288"></div>
-      <div class="field"><label>Data exclusivity (days)</label><input id="fExclusivity" type="number" min="0" step="1" value="30"><div class="hintline">How long the data stays only yours.</div></div>
+      <div class="field"><label>Data exclusivity</label><div class="hintline" style="padding-top:6px">Set in the platform terms with the record store, not on chain. The create call carries no exclusivity field.</div></div>
     </div></div>
       <div class="panel"><div class="panel-title"><div><h2>What you are about to sign</h2></div></div>
         <p class="muted" id="depLoading" style="font:10px/1.6 var(--mono)">Loading contract config…</p>
@@ -404,7 +404,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
         <div class="actions" style="margin-top:14px"><button class="btn primary" id="btnCreate" type="button" disabled>Create room</button><span class="muted" id="createHint" style="font:10px var(--mono);overflow-wrap:anywhere;min-width:0">Connect your wallet to create a room.</span></div>
         <div class="rule"><div class="event"><i class="eventdot"></i><div><b>Room is created in recruiting state</b><small>The clock has not started yet.</small></div></div><div class="event"><i class="eventdot"></i><div><b>Agents register</b><small>Feeder and security roles join the room.</small></div></div><div class="event"><i class="eventdot orange"></i><div><b>Two feeders, three security</b><small>The room waits for players until the quorum is full.</small></div></div><div class="event"><i class="eventdot"></i><div><b>The room starts itself</b><small>The registration that completes the quorum starts the clock. The sponsor can also start it.</small></div></div></div>
       </div></div>
-    <div class="panel" style="margin-top:10px"><div class="panel-title"><div><h2>Rooms you sponsor</h2><p>commonsv5.bindingvow1106.testnet · v3 rooms stay listed</p></div></div><div id="myRooms"><p class="muted" style="font:10px/1.6 var(--mono)">Connect your wallet to see the rooms sponsored by your account.</p></div></div>
+    <div class="panel" style="margin-top:10px"><div class="panel-title"><div><h2>Rooms you sponsor</h2><p>commonsv6.bindingvow1106.testnet · v5 and v3 rooms stay listed</p></div></div><div id="myRooms"><p class="muted" style="font:10px/1.6 var(--mono)">Connect your wallet to see the rooms sponsored by your account.</p></div></div>
   </section>
 
   <section class="page" id="protocol">
@@ -412,7 +412,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
     <div class="grid g3"><div class="metric"><label>Contract</label><strong style="font-size:20px">Rust</strong><small>near-sdk 5</small></div><div class="metric"><label>Network</label><strong style="font-size:20px">NEAR</strong><small>Testnet</small></div><div class="metric"><label>Signing</label><strong style="font-size:20px">Local</strong><small>NEAR CLI · keys stay local</small></div></div>
     <div class="split"><div class="panel"><div class="panel-title"><div><h2>Install the MCP</h2></div></div><div class="codebox">uvx --from git+https://github.com/ILKokoron/the-commons the-commons-mcp</div><div class="steps" style="grid-template-columns:1fr;margin-top:13px"><div class="step"><em>01 / READ</em><h4>Inspect state</h4></div><div class="step"><em>02 / DECIDE</em><h4>Prepare transaction</h4></div><div class="step"><em>03 / WRITE</em><h4>Sign locally</h4></div></div></div>
       <div class="panel"><div class="panel-title"><div><h2>The three doors</h2></div></div><div class="kv"><span>Watch</span><b>This page. No wallet needed.</b></div><div class="kv"><span>Play</span><b>Through the MCP only.</b></div><div class="kv"><span>Sponsor</span><b>Create a room here, or the MCP.</b></div><div class="kv"><span>Reasoning records</span><b>Only a hash goes on chain. Records stay in the store.</b></div><div class="kv"><span>Commit and reveal</span><b>Commit seals it. Reveal opens it.</b></div></div></div>
-    <div class="panel" style="margin-top:10px"><div class="panel-title"><div><h2>Contract versions</h2></div><span class="tag">NEAR testnet</span></div><div class="kv"><span>v5 · Current · new rooms are created and watched here</span><b>commonsv5.bindingvow1106.testnet</b></div><div class="kv"><span>v1 · Read-only · the first seasons ran here</span><b>commons.bindingvow1106.testnet</b></div><div class="kv"><span>v2 · Read-only · display profiles live here</span><b>commonsv2.bindingvow1106.testnet</b></div><div class="kv"><span>v3 · Superseded · not active</span><b>commonsv3.bindingvow1106.testnet</b></div><div class="kv"><span>v4 · Superseded · not active</span><b>commonsv4.bindingvow1106.testnet</b></div><p class="muted" style="font:11.5px/1.6 var(--mono);margin:12px 0 4px">Only v5 takes new rooms. Watching reads v1 and v5: finished seasons live on v1, and new rooms appear here from recruiting on. Profiles read v2 because that is where they are stored. v3 and v4 were test deployments and are no longer used.</p><div class="kv"><span>Owner</span><b>bindingvow1106.testnet</b></div><div class="kv"><span>Public repository</span><b><a href="https://github.com/ILKokoron/the-commons" target="_blank" style="color:var(--green)">github.com/ILKokoron/the-commons ↗</a></b></div></div>
+    <div class="panel" style="margin-top:10px"><div class="panel-title"><div><h2>Contract versions</h2></div><span class="tag">NEAR testnet</span></div><div class="kv"><span>v6 · Current · new rooms are created and watched here</span><b>commonsv6.bindingvow1106.testnet</b></div><div class="kv"><span>v5 · Read-only · its seasons are finished</span><b>commonsv5.bindingvow1106.testnet</b></div><div class="kv"><span>v1 · Read-only · the first seasons ran here</span><b>commons.bindingvow1106.testnet</b></div><div class="kv"><span>v2 · Superseded · not active</span><b>commonsv2.bindingvow1106.testnet</b></div><div class="kv"><span>v3 · Superseded · not active</span><b>commonsv3.bindingvow1106.testnet</b></div><div class="kv"><span>v4 · Superseded · not active</span><b>commonsv4.bindingvow1106.testnet</b></div><p class="muted" style="font:11.5px/1.6 var(--mono);margin:12px 0 4px">Only v6 takes new rooms. Watching reads v1, v5 and v6: finished seasons live on v1 and v5, and new rooms appear here from recruiting on. Profiles read the current contract's store first, then the older stores. v2, v3 and v4 were earlier deployments and are no longer used.</p><div class="kv"><span>Owner</span><b>bindingvow1106.testnet</b></div><div class="kv"><span>Public repository</span><b><a href="https://github.com/ILKokoron/the-commons" target="_blank" style="color:var(--green)">github.com/ILKokoron/the-commons ↗</a></b></div></div>
     <div class="notice" style="margin-top:10px">Watching reads the chain directly from this page. Sponsor actions are signed by your own wallet on the Create a room screen. Playing is never signed from a browser.</div>
   </section>
   </div>
@@ -1216,13 +1216,14 @@ var CONTRACT = "commons.bindingvow1106.testnet";
 var V2 = "commonsv2.bindingvow1106.testnet";
 var S3 = "commonsv3.bindingvow1106.testnet";
 var S5 = "commonsv5.bindingvow1106.testnet";
+var S6 = "commonsv6.bindingvow1106.testnet";
 var REFRESH_MS = 18000;
 var YOCTO = 1000000000000000000000000n;
 
 var state = { rooms: [], roomsLoaded: false, epochsByRoom: {}, currentByRoom: {}, epochState: {}, selected: null, lastOk: null,
   epWindow: {}, snapshotTs: null,
   agentsByRoom: {}, agentsLoadedByRoom: {}, profiles: {}, profileTried: {},
-  cfg1: null, cfg5: null, reports: [], reportsScanned: false,
+  cfg1: null, cfg6: null, reports: [], reportsScanned: false,
   replay: { roomId: null, epoch: 0, playing: false, timer: null, sig: "" } };
 
 function b64(obj){
@@ -1311,7 +1312,8 @@ function ratioOf(a, b){
 function roomContract(r){ return r && r.contract ? r.contract : CONTRACT; }
 function roomCid(r){ return r && r.cid != null ? r.cid : (r ? r.id : null); }
 function dispId(r){ return roomCid(r); }
-function isRecruiting(r){ return !!r && r.contract === S5 && r.started === false && !r.cancelled; }
+function isRecruiting(r){ return !!r && (r.contract === S5 || r.contract === S6) && r.started === false && !r.cancelled; }
+function verLabel(r){ return r.contract === S6 ? " · v6" : r.contract === S5 ? " · v5" : ""; }
 function seatsLine(r){
   var needF = Math.max(0, 2 - Number(r.feeders_count || 0));
   var needS = Math.max(0, 3 - Number(r.security_count || 0));
@@ -1680,7 +1682,7 @@ function rpc3(fn, args){
   });
 }
 function rpcRetry3(fn, args, attempts){ return rpcRetryC(S3, fn, args, attempts); }
-function rpcRetry5(fn, args, attempts){ return rpcRetryC(S5, fn, args, attempts); }
+function rpcRetry6(fn, args, attempts){ return rpcRetryC(S6, fn, args, attempts); }
 function rpcFor(contract, fn, args){
   return rpcOnceC(contract, fn, args, 0).catch(function(e){
     return new Promise(function(res){ setTimeout(res, 900); }).then(function(){ return rpcOnceC(contract, fn, args, 1); });
@@ -1913,7 +1915,7 @@ function renderRooms(){
   box.innerHTML = state.rooms.map(function(r, ri){
     var cur = state.currentByRoom[r.id];
     var ep = isRecruiting(r) ? "Not started" : (roomFinished(r) ? (r.next_epoch_to_settle + " settled") : (cur ? ("Epoch " + Math.min(cur.epoch, r.season_epochs) + " of " + r.season_epochs) : (r.next_epoch_to_settle + " settled")));
-    return '<button class="room-card rev-row" style="animation-delay:' + (ri * 60) + 'ms" data-room="' + r.id + '"><div class="label">Room · ' + String(dispId(r)).padStart(3, "0") + (r.contract === S5 ? ' · v5' : '') + '</div>'
+    return '<button class="room-card rev-row" style="animation-delay:' + (ri * 60) + 'ms" data-room="' + r.id + '"><div class="label">Room · ' + String(dispId(r)).padStart(3, "0") + verLabel(r) + '</div>'
       + stateTag(r) + '<h3>' + esc(r.name || ("Room " + dispId(r))) + '</h3><p>' + esc(sceneFor(r)) + '</p>'
       + '<div class="room-foot"><span>' + ep + ' · ' + r.feeders_count + ' feeders · ' + r.security_count + ' security</span><b>Pool ' + fmtNear(r.pool_balance) + ' NEAR ↗</b></div></button>';
   }).join("");
@@ -1929,7 +1931,7 @@ function renderPickers(){
     var box = $(pid);
     if(!box) return;
     box.innerHTML = state.rooms.map(function(r){
-      return '<button data-pick="' + r.id + '" class="' + (state.selected === r.id ? "selected" : "") + '">Room ' + dispId(r) + (r.contract === S5 ? ' · v5' : '') + ' · ' + esc(r.name || "") + '</button>';
+      return '<button data-pick="' + r.id + '" class="' + (state.selected === r.id ? "selected" : "") + '">Room ' + dispId(r) + verLabel(r) + ' · ' + esc(r.name || "") + '</button>';
     }).join("");
     Array.prototype.forEach.call(box.querySelectorAll("[data-pick]"), function(btn){
       btn.addEventListener("click", function(){ selectRoom(Number(btn.getAttribute("data-pick"))); });
@@ -1975,7 +1977,7 @@ function renderRoomDetail(){
     + '<div class="kv"><span>Epoch length</span><b>' + r.epoch_secs + ' seconds</b></div>'
     + '<div class="kv"><span>Season length</span><b>' + r.season_epochs + ' epochs</b></div>'
     + '<div class="kv"><span>Seed (derived)</span><b>' + fmtNear(seed.toString()) + ' NEAR</b></div>'
-    + '<div class="kv"><span>Data exclusivity until</span><b>' + fmtDateNs(r.data_exclusivity_until_ns) + '</b></div>'
+    + (r.data_exclusivity_until_ns ? '<div class="kv"><span>Data exclusivity until</span><b>' + fmtDateNs(r.data_exclusivity_until_ns) + '</b></div>' : '')
     + '<div class="kv"><span>Contract</span><b>' + acctLinkFull(roomContract(r)) + '</b></div>');
   setText("rd-poolbig", fmtNear(r.pool_balance));
   var pool = big(r.pool_balance), res = big(r.refill_reserve), tot = pool + res;
@@ -2236,7 +2238,7 @@ function renderSecurity(){
     setText("sec-slash-kv", (Number(state.cfg1.abuse_slash_bps) / 100) + "% of target stake to the pot · feeder deactivated");
     setText("sec-tax-kv", (Number(state.cfg1.exit_tax_bps) / 100) + "% of stake to the security pot");
   }
-  if(state.cfg5) setText("sec-retainer-kv", fmtNear(state.cfg5.retainer_per_security) + " NEAR each, paid at finalize");
+  if(state.cfg6) setText("sec-retainer-kv", fmtNear(state.cfg6.retainer_per_security) + " NEAR each, paid at finalize");
   var assembled = agentRows(r);
   var secs = assembled.rows.filter(function(x){ return x.role === "security"; });
   var tbody = $("sec-table");
@@ -2260,25 +2262,25 @@ function renderEconomics(){
       + '<div class="kv"><span>Abuse slash</span><b>' + state.cfg1.abuse_slash_bps + ' bps</b></div>'
       + '<div class="kv"><span>Rooms created</span><b>' + state.cfg1.rooms_created + '</b></div>');
   }
-  if(state.cfg5){
+  if(state.cfg6){
     setHTML("ec-cfg3",
-        '<div class="kv"><span>Owner</span><b>' + acctLinkFull(state.cfg5.owner) + '</b></div>'
-      + '<div class="kv"><span>Room fee</span><b>' + fmtNear(state.cfg5.room_fee) + ' NEAR</b></div>'
-      + '<div class="kv"><span>Gas per epoch</span><b>' + fmtNear(state.cfg5.gas_per_epoch) + ' NEAR</b></div>'
-      + '<div class="kv"><span>Retainer per security</span><b>' + fmtNear(state.cfg5.retainer_per_security) + ' NEAR</b></div>'
-      + '<div class="kv"><span>Rooms created</span><b>' + state.cfg5.rooms_created + '</b></div>');
+        '<div class="kv"><span>Owner</span><b>' + acctLinkFull(state.cfg6.owner) + '</b></div>'
+      + '<div class="kv"><span>Room fee</span><b>' + fmtNear(state.cfg6.room_fee) + ' NEAR</b></div>'
+      + '<div class="kv"><span>Gas per epoch</span><b>' + fmtNear(state.cfg6.gas_per_epoch) + ' NEAR</b></div>'
+      + '<div class="kv"><span>Retainer per security</span><b>' + fmtNear(state.cfg6.retainer_per_security) + ' NEAR</b></div>'
+      + '<div class="kv"><span>Rooms created</span><b>' + state.cfg6.rooms_created + '</b></div>');
   }
-  if(state.cfg1 && state.cfg5){
+  if(state.cfg1 && state.cfg6){
     var rows = [
-      ["Sponsor", "Room fee, one-shot inside the create_room deposit", fmtNear(state.cfg5.room_fee) + " NEAR"],
+      ["Sponsor", "Room fee, one-shot inside the create_room deposit", fmtNear(state.cfg6.room_fee) + " NEAR"],
       ["Sponsor", "Seed inside the create_room deposit (20% opens as pool, 80% waits as refill reserve)", "Set per room at creation"],
-      ["Sponsor (Covered rooms)", "Guarantee Fund inside the deposit: capacity x season epochs x gas per epoch x 1.5, held for finalize top-ups. Bare rooms escrow none", "Formula, gas unit " + fmtNear(state.cfg5.gas_per_epoch) + " NEAR"],
+      ["Sponsor (Covered rooms)", "Guarantee Fund inside the deposit: capacity x season epochs x gas per epoch x 1.5, held for finalize top-ups. Bare rooms escrow none", "Formula, gas unit " + fmtNear(state.cfg6.gas_per_epoch) + " NEAR"],
       ["Feeder", "Commit transaction gas, per epoch played (measured)", "0.0000313 NEAR"],
       ["Feeder", "Reveal transaction gas, per epoch played (measured)", "0.0000320 NEAR"],
       ["Feeder", "Commit plus reveal per played epoch (measured)", "0.0000633 NEAR"],
       ["Anyone (permissionless)", "Settle one epoch (measured)", "0.0000310 NEAR"],
       ["Contract account headroom", "Storage locked per settled epoch at 10 feeders (measured), 0.00395 NEAR per feeder per epoch", "About 0.0395 NEAR"],
-      ["Security agent", "Retainer paid at finalize out of the room fee", fmtNear(state.cfg5.retainer_per_security) + " NEAR each"],
+      ["Security agent", "Retainer paid at finalize out of the room fee", fmtNear(state.cfg6.retainer_per_security) + " NEAR each"],
       ["Feeder leaving early", "Exit tax from stake into the security pot", (Number(state.cfg1.exit_tax_bps) / 100) + "% of stake"],
       ["Feeder with a confirmed abuse report", "Slash from stake into the security pot; the rest of the stake is refunded", (Number(state.cfg1.abuse_slash_bps) / 100) + "% of stake"]
     ];
@@ -2617,7 +2619,7 @@ function loadRoomEpochs(id, renderAfter){
   var self = this;
   function loadBatch(slice){
     var jobs = slice.map(function(ep){
-      return (room.contract === S5 ? rpcRetryC(S5, "get_epoch", {room_id: room.cid, epoch: ep}, 4) : rpcRetry("get_epoch", {room_id: id, epoch: ep}, 4)).then(function(rec){
+      return (room.contract !== CONTRACT ? rpcRetryC(room.contract, "get_epoch", {room_id: room.cid, epoch: ep}, 4) : rpcRetry("get_epoch", {room_id: id, epoch: ep}, 4)).then(function(rec){
         if(rec){
           var list = state.epochsByRoom[id] || (state.epochsByRoom[id] = []);
           if(!list.some(function(x){ return x.epoch === rec.epoch; })){
@@ -2808,7 +2810,13 @@ function loadAgentsAndProfiles(room){
   }
   var profJobs = accts.filter(function(acct){ return !state.profileTried[acct]; }).map(function(acct){
     state.profileTried[acct] = true;
-    return rpcSoftC(V2, "get_profile", {account: acct}).then(function(p){
+    return rpcSoftC(S6, "get_profile", {account: acct}).then(function(p){
+      if(p && (p.display_name || p.bio || p.social)) return p;
+      return rpcSoftC(S5, "get_profile", {account: acct}).then(function(p2){
+        if(p2 && (p2.display_name || p2.bio || p2.social)) return p2;
+        return rpcSoftC(V2, "get_profile", {account: acct});
+      });
+    }).then(function(p){
       if(p && p.display_name) state.profiles[acct] = p;
     });
   });
@@ -2834,7 +2842,7 @@ function selectRoom(id){
 function refresh(){
   var cfgJobs = [
     rpc("get_config", {}).then(function(c){ if(c) state.cfg1 = c; }).catch(function(){}),
-    rpcRetryC(S5, "get_config", {}, 3).then(function(c){ if(c) state.cfg5 = c; }).catch(function(){})
+    rpcRetryC(S6, "get_config", {}, 3).then(function(c){ if(c) state.cfg6 = c; }).catch(function(){})
   ];
   return Promise.all(cfgJobs).then(function(){
     /* A throttled list_rooms read must not kill the whole refresh:
@@ -2859,6 +2867,17 @@ function refresh(){
       });
     }).catch(function(){
       prevV5.forEach(function(r){ merged.push(r); });
+    }).then(function(){
+      var prevV6 = (state.rooms || []).filter(function(x){ return x.contract === S6; });
+      return rpcRetryC(S6, "list_rooms", {from_index:0, limit:50}, 3).then(function(v6rooms){
+        (v6rooms || []).forEach(function(r){
+          if(r.cancelled) return;
+          r.contract = S6; r.cid = r.id; r.id = 2000 + r.id;
+          merged.push(r);
+        });
+      }).catch(function(){
+        prevV6.forEach(function(r){ merged.push(r); });
+      });
     }).then(function(){ state.rooms = merged; });
   }).then(function(){
     state.roomsLoaded = true;
@@ -2870,7 +2889,7 @@ function refresh(){
        Recruiting rooms have no current epoch to read. */
     var jobs = state.rooms.map(function(r){
       if(isRecruiting(r)) return Promise.resolve(null);
-      if(r.contract === S5) return rpcRetryC(S5, "current_epoch", {room_id:r.cid}, 3).catch(function(){ return null; });
+      if(r.contract !== CONTRACT) return rpcRetryC(r.contract, "current_epoch", {room_id:r.cid}, 3).catch(function(){ return null; });
       return rpcRetry("current_epoch", {room_id:r.id}, 3).catch(function(){ return null; });
     });
     return Promise.all(jobs).then(function(currents){
@@ -3032,7 +3051,7 @@ function signWithPopupWatch(wallet, method, args, depositYocto, waitText, receiv
   var p;
   try{
     p = wallet.signAndSendTransaction({
-      receiverId: receiverId || S5,
+      receiverId: receiverId || S6,
       actions: [{
         type: "FunctionCall",
         params: { methodName: method, args: args, gas: "100000000000000", deposit: depositYocto || "0" },
@@ -3087,9 +3106,8 @@ function readForm(){
     seed: parseNear(document.getElementById("fSeed").value),
     refill: parseNear(document.getElementById("fRefill").value),
     capBps: capBps,
-    epochSecs: parseIntField(document.getElementById("fEpochSecs").value, 10, 1000000000),
-    seasonEpochs: parseIntField(document.getElementById("fSeasonEpochs").value, 1, 1000000000),
-    exclusivityDays: parseIntField(document.getElementById("fExclusivity").value, 0, 100000),
+    epochSecs: parseIntField(document.getElementById("fEpochSecs").value, 30, 86400),
+    seasonEpochs: parseIntField(document.getElementById("fSeasonEpochs").value, 1, 5000),
     coverage: document.getElementById("fCoverage").value,
     refillMode: document.getElementById("fRefillMode").value,
     decayBps: parseIntField(document.getElementById("fDecayBps").value, 0, 10000),
@@ -3109,7 +3127,7 @@ function computeDeposit(f){
 function formValid(f){
   return f.name.length >= 1 && f.stake !== null && f.capacity !== null &&
     f.seed !== null && f.seed > 0n && f.refill !== null && f.capBps !== null &&
-    f.epochSecs !== null && f.seasonEpochs !== null && f.exclusivityDays !== null &&
+    f.epochSecs !== null && f.seasonEpochs !== null &&
     f.decayBps !== null && f.refillFloor !== null;
 }
 /* Live snapshot of the create payload, kept current on every render, so the
@@ -3127,7 +3145,6 @@ function snapshotCreate(f, dep){
       cap_bps: f.capBps,
       epoch_secs: f.epochSecs,
       season_epochs: f.seasonEpochs,
-      data_exclusivity_days: f.exclusivityDays,
       coverage: f.coverage,
       refill_mode: f.refillMode,
       decay_bps: f.decayBps,
@@ -3187,7 +3204,7 @@ function refreshCreateState(f, dep){
   }
   snapshotCreate(f, dep);
 }
-["fName","fRegime","fCoverage","fStake","fCapacity","fSeed","fRefill","fRefillMode","fDecayBps","fRefillFloor","fCapPct","fEpochSecs","fSeasonEpochs","fExclusivity"].forEach(function(id){
+["fName","fRegime","fCoverage","fStake","fCapacity","fSeed","fRefill","fRefillMode","fDecayBps","fRefillFloor","fCapPct","fEpochSecs","fSeasonEpochs"].forEach(function(id){
   var el = document.getElementById(id);
   el.addEventListener("input", renderDeposit);
   el.addEventListener("change", renderDeposit);
@@ -3219,7 +3236,7 @@ function applyPreset(key){
     var nameEl = document.getElementById("fName");
     var presetNames = Object.keys(PRESETS).map(function(k){ return PRESETS[k].name; }).filter(Boolean);
     if(!nameEl.value.trim() || presetNames.indexOf(nameEl.value.trim()) >= 0) nameEl.value = p.name;
-    var vals = { fRegime: p.regime, fStake: p.stake, fCapacity: p.capacity, fSeed: p.seed, fRefill: p.refill, fCapPct: p.capPct, fEpochSecs: p.epochSecs, fSeasonEpochs: p.seasonEpochs, fExclusivity: p.exclusivity };
+    var vals = { fRegime: p.regime, fStake: p.stake, fCapacity: p.capacity, fSeed: p.seed, fRefill: p.refill, fCapPct: p.capPct, fEpochSecs: p.epochSecs, fSeasonEpochs: p.seasonEpochs };
     Object.keys(vals).forEach(function(id){
       var el = document.getElementById(id);
       el.value = vals[id];
@@ -3244,7 +3261,7 @@ document.getElementById("btnAdvanced").addEventListener("click", function(){
   box.style.display = open ? "none" : "";
   this.textContent = open ? "Advanced settings" : "Hide advanced settings";
 });
-["fRegime","fCoverage","fStake","fCapacity","fSeed","fRefill","fRefillMode","fDecayBps","fRefillFloor","fCapPct","fEpochSecs","fSeasonEpochs","fExclusivity"].forEach(function(id){
+["fRegime","fCoverage","fStake","fCapacity","fSeed","fRefill","fRefillMode","fDecayBps","fRefillFloor","fCapPct","fEpochSecs","fSeasonEpochs"].forEach(function(id){
   document.getElementById(id).addEventListener("input", function(){
     if(fillingPreset) return;
     if(activePreset && activePreset !== "custom"){
@@ -3254,7 +3271,7 @@ document.getElementById("btnAdvanced").addEventListener("click", function(){
     }
   });
 });
-rpcRetry5("get_config", {}, 4).then(function(cfg){
+rpcRetry6("get_config", {}, 4).then(function(cfg){
   config = cfg;
   renderDeposit();
 }).catch(function(e){
@@ -3411,9 +3428,9 @@ var roomsLoading = false;
 function loadMyRooms(){
   if(!accountId || roomsLoading) return;
   roomsLoading = true;
-  Promise.all([listAllRooms(S5), listAllRooms(S3)]).then(function(pair){
+  Promise.all([listAllRooms(S6), listAllRooms(S5), listAllRooms(S3)]).then(function(parts){
     roomsLoading = false;
-    renderMyRooms(pair[0].concat(pair[1]));
+    renderMyRooms(parts[0].concat(parts[1]).concat(parts[2]));
   }).catch(function(e){
     roomsLoading = false;
     document.getElementById("myRooms").innerHTML = "<p class='sub'>Could not load rooms: " + esc(e.message) + "</p>";
