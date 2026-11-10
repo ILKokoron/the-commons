@@ -230,6 +230,27 @@ async def main():
 
     env = dict(os.environ)
     env["COMMONS_ACCOUNT_ID"] = args.account
+    # Platform record store (issue 6): fleet commits publish by
+    # default, so a fleet record's log_ref is the store content id
+    # and the dataset claim verifies from the chain alone. The
+    # token comes from the environment when present, else from the
+    # platform credentials file on this machine. Never logged.
+    if "COMMONS_STORE_TOKEN" not in env:
+        try:
+            _cred = os.path.expanduser(
+                "~/workspace/the-commons/store-credentials/"
+                "credentials.env")
+            with open(_cred) as _f:
+                for _line in _f:
+                    _line = _line.strip()
+                    if "=" in _line and not _line.startswith("#"):
+                        _k, _, _v = _line.partition("=")
+                        if _k in ("COMMONS_STORE_URL",
+                                  "COMMONS_STORE_TOKEN") \
+                                and _k not in env:
+                            env[_k] = _v
+        except Exception:
+            pass
     params = StdioServerParameters(
         command=sys.executable, args=[SERVER], env=env)
 
@@ -374,13 +395,6 @@ async def main():
                                 log(f"epoch {epoch}: reveal failed: "
                                     f"{res.get('error', '')[:160]}")
 
-                    # Footprint bundles for epochs we have moved
-                    # past. Runs after the time-critical work above;
-                    # the helper never raises and uploads at most
-                    # once per finished epoch.
-                    if fp:
-                        fp.maybe_bundle(epoch)
-
                     if season_over and next_settle >= season_epochs:
                         log("season over and fully settled; runner done")
                         break
@@ -431,6 +445,17 @@ async def main():
                                 log(f"settle epoch {e} not done by me: "
                                     f"{res.get('error', '')[:120]}")
                             break
+
+                    # Footprint bundles for epochs we have moved
+                    # past. This runs AFTER the keeper work above,
+                    # never before it (C5): a bundle for an epoch
+                    # must contain this pass's settle attempt for
+                    # that epoch, and bundling first shipped bundles
+                    # that claimed an epoch whose settle record was
+                    # only written afterwards, so the settle never
+                    # reached the store at all.
+                    if fp:
+                        fp.maybe_bundle(epoch)
                 except Exception as e:
                     log(f"loop error: {e}")
                 await asyncio.sleep(args.poll)
