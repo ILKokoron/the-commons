@@ -48,7 +48,21 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEFAULT_CONTRACT = "commons.bindingvow1106.testnet"
+def _registry_default_contract():
+    """Default contract from the shared registry
+    (mcp/contracts.json); the exporter used to default to the v1
+    contract long after the fleet moved on."""
+    try:
+        reg_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "mcp",
+            "contracts.json")
+        with open(reg_path) as f:
+            return json.load(f)["default"]
+    except Exception:
+        return "commonsv5.bindingvow1106.testnet"
+
+
+DEFAULT_CONTRACT = _registry_default_contract()
 DEFAULT_RPC = "https://rpc.testnet.fastnear.com"
 YOCTO_PER_NEAR = 10 ** 24
 
