@@ -442,7 +442,10 @@ Per epoch:
   the right to be paid at settlement.
 - settle_epoch. Payer: whoever calls it, gas only (about 0.0000310
   NEAR). In practice the platform keeper calls it, so the platform
-  subsidises this gas; the contract never pays it. Process, in
+  subsidises this gas; the contract never pays it. The keeper is a
+  standalone service (agents/keeper.py): it polls one room on the
+  contract's own clock and settles every epoch that comes due, in
+  order, independently of any player's runner. Process, in
   order: this epoch's scheduled refill moves from the room's
   reserve into its pool, capped by the reserve (an internal ledger
   move of sponsor money, no transfer leaves the contract); the
