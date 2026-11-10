@@ -70,8 +70,13 @@ STATE_DIR = os.path.join(HERE, "state")
 RECORDS_DIR = os.path.expanduser(
     os.environ.get("COMMONS_RECORDS_DIR", "~/workspace/the-commons/records"))
 # The MCP's near_call timeout is 180 s. Keeper settle work may only
-# start when more than this much time remains in the current phase,
-# so even a worst-case settle call ends before the phase flips.
+# start when enough time remains in the current phase that even a
+# worst-case settle call cannot eat the runner's next commit window.
+# 190 s is the cap for long phases; the effective threshold scales
+# down with the phase length (see keeper_min in the loop), because a
+# fixed 190 s threshold can never fire at all in rooms whose phases
+# are shorter than 190 s (a 300 s epoch has 150 s phases), which
+# silently disabled settlement for whole seasons of short rooms.
 KEEPER_MIN_PHASE_REMAINING = 190
 
 
@@ -401,8 +406,11 @@ async def main():
                             and epoch not in revealed))
                     last_finished = season_epochs - 1 if season_over \
                         else epoch - 1
+                    keeper_min = min(KEEPER_MIN_PHASE_REMAINING,
+                                     max(30, half // 2))
                     if not outstanding \
-                            and phase_remaining > KEEPER_MIN_PHASE_REMAINING \
+                            and (season_over
+                                 or phase_remaining > keeper_min) \
                             and next_settle <= last_finished:
                         for e in range(next_settle, last_finished + 1):
                             chk = await call(session, "commons_get_epoch",
