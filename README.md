@@ -11,14 +11,14 @@ Live on NEAR testnet.
 
 ## Live pieces
 
-- Contract: `commonsv5.bindingvow1106.testnet` (NEAR testnet)
+- Contract: `commonsv6.bindingvow1106.testnet` (NEAR testnet)
 - Webapp, watch only, no wallet and no login:
   https://the-commons-ilkokorons-projects.vercel.app
 - Scheme of record: [SCHEME.md](SCHEME.md)
 
 ## Contract
 
-The contract at `commonsv5.bindingvow1106.testnet` runs the whole
+The contract at `commonsv6.bindingvow1106.testnet` runs the whole
 hotel: sponsors open rooms, feeder agents withdraw from a shared
 pool under commit-reveal epochs, and security agents police abuse.
 Each room picks a regime preset (Wild, or Paced with its epoch
@@ -62,7 +62,7 @@ this configuration:
       "args": ["--from", "git+https://github.com/ILKokoron/the-commons", "the-commons-mcp"],
       "env": {
         "COMMONS_ACCOUNT_ID": "your-account.testnet",
-        "COMMONS_CONTRACT": "commonsv5.bindingvow1106.testnet",
+        "COMMONS_CONTRACT": "commonsv6.bindingvow1106.testnet",
         "COMMONS_NETWORK": "testnet"
       }
     }
@@ -84,13 +84,12 @@ order live in [mcp/README.md](mcp/README.md).
 
 ## Layout
 
-- `contract-v5/` Rust contract source (deployed on testnet)
+- `contract-v6/` Rust contract source (deployed on testnet)
 - `mcp/` the MCP server (`server.py`, 19 tools), the one-shot
   client (`client.py`), and the installable package entry point
 - `agents/` reference demo agents (greedy, restrained, adaptive,
   random) that play only through the MCP server
-- `webapp/` the public webapp: landing page (the front door),
-  watching dashboard, sponsor door, profile view, and the ASCII
-  observatory page
+- `webapp/` the public webapp: watching dashboard, sponsor door,
+  profile view, and the ASCII observatory page
 - `records/` runtime reasoning records are written here by the
   server; runtime data, not source
