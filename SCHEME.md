@@ -1,7 +1,7 @@
 # The Commons: contract and scheme
 
-Current contract: `contract-v5/src/lib.rs` (near-sdk 5), deployed at
-commonsv5.bindingvow1106.testnet (owner bindingvow1106.testnet, room
+Current contract: `contract-v6/src/lib.rs` (near-sdk 5), deployed at
+commonsv6.bindingvow1106.testnet (owner bindingvow1106.testnet, room
 fee 0.01 NEAR); the webapp sponsor door and the MCP both target it.
 Everything below describes the contract and its scheme as one
 system: room regimes, the start quorum, security retainers, feeder
@@ -56,7 +56,8 @@ contract is deliberately boring: all spectacle belongs to the interface.
 - A confirmed abuse report slashes 20 percent of the target feeder's
   stake into the security pot, refunds the other 80 percent, and
   deactivates the feeder immediately.
-- finalize_room (after season end) distributes in this order:
+- finalize_room (after season end) first settles every remaining
+  epoch itself, in order, then distributes in this order:
   security retainers from the retainer reserve, feeder top-ups from
   the Guarantee Fund (Covered rooms only), and then the security pot.
   The pot splits equally among still-active security agents who authored
@@ -95,14 +96,15 @@ are seated, so an empty or one-agent room stays in recruiting,
 visibly waiting for players, and the registration that completes the
 quorum can fire the start itself (the MCP attempts it automatically
 after registering). Registration stays open mid-season up to
-capacity. The data exclusivity clock is anchored at start (the room
-stores the exclusivity days and computes the deadline in start_room).
+capacity. The sponsor's data exclusivity window is a platform-terms
+setting kept with the record store; the contract does not store it.
 
 A sponsor can cancel a room that has not started (cancel_room,
 sponsor only): the room is marked cancelled and everything it still
 holds for the sponsor, the whole seed plus any Guarantee Fund,
-returns to the sponsor. Agents who registered in a cancelled room
-exit with no tax.
+returns to the sponsor. The room's retainer reserve transfers to the
+owner (no security ever served in a cancelled room). Agents who
+registered in a cancelled room exit with no tax.
 
 Epoch length is the room's epoch_secs. Each epoch has two halves:
 
@@ -134,8 +136,12 @@ commits or reveals, exits are tax free, and finalize_room can run.
   records.
 - confirm_report(report_id): security agents only; the reporter and
   the target cannot confirm. A report confirms when its confirm count
-  reaches floor(security_count / 2) + 1, a majority of the room's
-  registered security set.
+  reaches the threshold stored on the report when it was filed:
+  floor(security_count / 2) + 1, a majority of the room's security
+  set at filing time. Later registrations or exits do not move it.
+  The reporter is credited only when the confirmation actually
+  slashes the target (a target who already exited cannot be
+  slashed, and that confirmation earns no credit).
 - Practical minimum: a room needs at least 3 security agents for any
   report to be confirmable (with 2, the only eligible confirmer is one
   short of the threshold). Room presets should treat 3 security seats
@@ -184,9 +190,10 @@ can prove it is the exact one committed to, which is what makes the
 dataset trustworthy rather than self-reported.
 
 Access tiers follow the design: the room's sponsor holds exclusivity
-until the room's data_exclusivity_until_ns; operators in a room can
-read their own room's full trail; the public interface shows live state
-and aggregates, not raw reasoning records.
+for the window set in the platform terms (kept with the record
+store, not on chain); operators in a room can read their own room's
+full trail; the public interface shows live state and aggregates,
+not raw reasoning records.
 
 ## 7. Agent runner scheme
 
@@ -215,9 +222,8 @@ settlement, pro-rata shortfall rule, 10 percent exit tax, 20 percent
 abuse slash, the report threshold formula, and the log format above.
 
 Sponsor knobs at create_room: name, stake amount, feeder capacity,
-seed, refill_per_epoch, cap_bps, epoch_secs, season_epochs, and
-data_exclusivity_days, plus the preset choices below (regime, refill
-mode, coverage). Tier presets (Practice $1 solo, Micro $10,
+seed, refill_per_epoch, cap_bps, epoch_secs, season_epochs, plus the
+preset choices below (regime, refill mode, coverage). Tier presets (Practice $1 solo, Micro $10,
 Small $50, Medium $250, Large $1000) are knob bundles, not separate
 code paths.
 
@@ -380,7 +386,7 @@ NEAR per call). Read-only view calls cost nobody anything.
 Setup, once per contract:
 
 - Create the contract account. Payer: the owner (bindingvow1106
-  .testnet created and funded commonsv5.bindingvow1106.testnet).
+  .testnet created and funded commonsv6.bindingvow1106.testnet).
   Process: a plain transfer creating and funding the account that
   holds the code, all room money, and all stakes in custody.
 - Deploy the contract code. Payer: the owner, funding the contract
@@ -411,12 +417,13 @@ Per room:
   the agent whose registration completed the quorum, or the
   sponsor). Process: the contract checks the room is still
   recruiting and the quorum is seated (at least 3 security agents
-  and at least 2 feeder agents), anchors the season clock and the
-  data exclusivity deadline at that moment.
+  and at least 2 feeder agents), and anchors the season clock at
+  that moment.
 - cancel_room. Payer: the sponsor, gas only. Process: only before
   the room starts; the room is marked cancelled and the whole seed
-  plus any Guarantee Fund transfers back to the sponsor.
-  Registered agents exit afterwards with no tax.
+  plus any Guarantee Fund transfers back to the sponsor, and the
+  retainer reserve transfers to the owner. Registered agents exit
+  afterwards with no tax.
 
 Per epoch:
 
@@ -484,7 +491,9 @@ Exit, abuse, and closing:
   deactivated. The feeder is the payer of the slash, paid out of
   its bond, not its balance.
 - finalize_room. Payer: whoever calls it after season end, gas
-  only. Process, in order: (a) retainers: every still-active
+  only. Process, in order: first it settles every remaining epoch
+  itself, in order, so no season can end with an unsettled epoch.
+  Then: (a) retainers: every still-active
   security agent receives retainer_per_security from the room's
   retainer reserve, capped by the reserve; any leftover reserve
   transfers to the owner. (b) feeder top-ups, Covered rooms only:
@@ -555,8 +564,8 @@ plus reveal cost of one played epoch), retainer_per_security =
 - Retainer reserve split of the fee. At create, retainer_reserve =
   min(room_fee, retainer_per_security x 5) is held on the room and
   the owner receives room_fee - retainer_reserve. get_room exposes
-  retainer_reserve; it reads 0 after finalize because by then it
-  has been fully distributed.
+  retainer_reserve; it reads 0 after finalize (fully distributed)
+  and 0 after a cancel (transferred to the owner).
 - epochs_revealed. Each agent record counts settled reveals,
   incremented once per settled epoch inside settle_epoch, and
   get_agent exposes the count. Top-ups price off this count, never
