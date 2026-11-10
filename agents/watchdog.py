@@ -14,13 +14,12 @@ health are checked per runner:
    log holds a successful commit or reveal line carrying a real tx
    id within the last 2 epoch lengths (room 2 epochs are 600 s, so
    1200 s). A runner can be alive and logging failure retries for
-   hours while never landing a commit (for example when the
-   contract account cannot cover the storage cost of new state, or
-   an operator account cannot cover the near CLI's upfront balance
-   requirement). Relaunching does not fix that class of problem,
-   so a non-playing runner is NOT relaunched; it is reported with
-   one NOT-PLAYING line per runner, plus a dated copy in
-   fleet-watchdog.log.
+   hours while never landing a commit (that is exactly how the
+   2026-11-08 room 2 stall hid: LackBalanceForState on the contract
+   plus operator accounts under the near CLI upfront balance wall).
+   Relaunching does not fix that class of problem, so a non-playing
+   runner is NOT relaunched; it is reported with one NOT-PLAYING
+   line per runner, plus a dated copy in fleet-watchdog.log.
 
 The run also reads the v1 contract account balance and storage via
 RPC and raises ALARM-HEADROOM when the storage headroom drops
@@ -54,8 +53,28 @@ import fleet
 
 STALE_SECS = 15 * 60
 WATCHDOG_LOG = os.path.join(fleet.HERE, "logs", "fleet-watchdog.log")
-CONTRACT = "commons.bindingvow1106.testnet"
-ROOM_ID = 2
+def _registry_contract():
+    """Contract addresses come from the one shared registry
+    (mcp/contracts.json), the same file the MCP server and the
+    dataset exporter read. COMMONS_CONTRACT overrides it. The
+    watchdog used to hardcode the v1 contract while the fleet
+    played on v5, so it watched a contract nobody played on."""
+    import json as _json
+    env = os.environ.get("COMMONS_CONTRACT")
+    if env:
+        return env
+    try:
+        reg_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "mcp",
+            "contracts.json")
+        with open(reg_path) as f:
+            return _json.load(f)["default"]
+    except Exception:
+        return "commonsv5.bindingvow1106.testnet"
+
+
+CONTRACT = _registry_contract()
+ROOM_ID = int(os.environ.get("COMMONS_ROOM_ID", "2"))
 FALLBACK_EPOCH_SECS = 600
 RPC_URLS = [
     "https://rpc.testnet.fastnear.com",
