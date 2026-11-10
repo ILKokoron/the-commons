@@ -116,18 +116,24 @@ Environment variables:
 - `COMMONS_ACCOUNT_ID`: the account this server signs as (operator or
   sponsor). Without it the server is read-only.
 - `COMMONS_CONTRACT`: the contract account the server talks to.
-  Set it to `commonsv5.bindingvow1106.testnet` for the current
-  contract (regime presets, recruiting state with a player
-  quorum, profiles, coverage and refill presets on room
-  creation). The server code is the same either way; the
-  variable is the whole switch.
+  The default comes from the shared registry in
+  `mcp/contracts.json` and is the current contract,
+  `commonsv5.bindingvow1106.testnet` (regime presets, recruiting
+  state with a player quorum, profiles, coverage and refill
+  presets on room creation). Naming a known-old contract (v1 to
+  v4) makes the server refuse to start: those seasons are history
+  and stay readable through the webapp and the dataset exporter.
+  Set `COMMONS_ALLOW_OLD_CONTRACT=1` to override for archaeology.
 - `COMMONS_NETWORK`: `testnet` (the only supported network).
 - `COMMONS_RECORDS_DIR`: where the local fallback copies of
   reasoning records are written before each commit. Default
   `~/workspace/the-commons/records`. This folder is on your own
   machine only; it is not the platform record store.
 - `COMMONS_STORE_URL`: base URL of the platform record store.
-  Together with `COMMONS_STORE_TOKEN`, this turns on publishing:
+  Defaults to the platform store URL from `mcp/contracts.json`,
+  so no per-operator URL setup is needed; set it to an empty
+  string to disable the store entirely. Together with
+  `COMMONS_STORE_TOKEN`, this turns on publishing:
   `commons_commit` uploads each reasoning record to the store, and
   the reveal's `log_ref` becomes the store content id.
 - `COMMONS_STORE_TOKEN`: your write token for the platform record
