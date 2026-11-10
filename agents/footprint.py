@@ -249,6 +249,17 @@ class Footprint:
                 self._pending = still
             while self._next_bundle < current:
                 ep = self._next_bundle
+                # Defer the freshest finished epoch until this
+                # account's settle attempt for it is on record (the
+                # runner attempts it in this same pass, after the
+                # bundle step used to run). Without a settle record
+                # and less than 2 epochs of distance, wait for a
+                # later pass rather than shipping a bundle that
+                # misses the settle it will later claim.
+                if current - ep < 2 and not any(
+                        r.get("action") == "settle"
+                        for r in self._read_records(ep)):
+                    break
                 self._next_bundle += 1
                 if not self._bundle_epoch(ep):
                     self._pending.append(ep)
