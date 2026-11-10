@@ -11,7 +11,7 @@ Configuration comes from the environment:
   COMMONS_CONTRACT     contract account. The default comes from
                        the shared registry in contracts.json and is
                        the current contract,
-                       commonsv5.bindingvow1106.testnet. Naming a
+                       commonsv6.bindingvow1106.testnet. Naming a
                        known-old contract (v1 to v4) makes the server
                        refuse to start, because those contracts are
                        history, watchable through the webapp and the
@@ -87,12 +87,13 @@ def _load_registry():
             return json.load(f)
     except Exception:
         return {
-            "default": "commonsv5.bindingvow1106.testnet",
+            "default": "commonsv6.bindingvow1106.testnet",
             "known_old": [
                 "commons.bindingvow1106.testnet",
                 "commonsv2.bindingvow1106.testnet",
                 "commonsv3.bindingvow1106.testnet",
                 "commonsv4.bindingvow1106.testnet",
+                "commonsv5.bindingvow1106.testnet",
             ],
             "store_url":
                 "https://the-commons-store-ilkokorons-projects.vercel.app",
@@ -102,7 +103,7 @@ def _load_registry():
 REGISTRY = _load_registry()
 ACCOUNT = os.environ.get("COMMONS_ACCOUNT_ID", "")
 CONTRACT = os.environ.get("COMMONS_CONTRACT", "") \
-    or REGISTRY.get("default", "commonsv5.bindingvow1106.testnet")
+    or REGISTRY.get("default", "commonsv6.bindingvow1106.testnet")
 CONTRACT_IS_OLD = CONTRACT in REGISTRY.get("known_old", [])
 NETWORK = os.environ.get("COMMONS_NETWORK", "testnet")
 RECORDS_DIR = os.path.expanduser(
@@ -805,11 +806,12 @@ def commons_create_room(
         return err(f'invalid regime {regime!r}: must be "Wild" or '
                    '"Paced" (contract v2), or omitted entirely for a '
                    "v1 contract")
-    v45 = CONTRACT.split(".")[0] in ("commonsv4", "commonsv5")
+    v45 = CONTRACT.split(".")[0] in ("commonsv4", "commonsv5", "commonsv6")
+    v6 = CONTRACT.split(".")[0] == "commonsv6"
     cov = (coverage or "").strip()
     rm = (refill_mode or "").strip()
     if not v45 and (cov or rm):
-        return err("coverage and refill_mode are contract v4/v5 "
+        return err("coverage and refill_mode are contract v4+ "
                    "arguments; the configured contract is "
                    f"{CONTRACT}")
     if v45:
@@ -838,8 +840,12 @@ def commons_create_room(
             "cap_bps": cap_bps,
             "epoch_secs": epoch_secs,
             "season_epochs": season_epochs,
-            "data_exclusivity_days": data_exclusivity_days,
         }
+        # v6: data exclusivity is a platform-terms setting kept
+        # with the record store; the contract no longer stores it,
+        # so the argument is not sent on chain.
+        if not v6:
+            args["data_exclusivity_days"] = data_exclusivity_days
         if reg:
             args["regime"] = reg
         if v45:
@@ -857,6 +863,10 @@ def commons_create_room(
     if v45:
         res["coverage"] = cov
         res["refill_mode"] = rm
+    if v6:
+        res["data_exclusivity"] = (
+            "platform-terms setting, not stored on chain in v6; "
+            f"requested window was {data_exclusivity_days} days")
     # The room id comes from the create transaction's own return
     # value (B6). The old rooms_created-minus-one derivation raced
     # with any other sponsor creating a room in between and could
@@ -989,7 +999,7 @@ def _maybe_auto_start(res, room_id):
             f"(starts at 2 feeders + 3 security)")
         if feeders < 2 or security < 3:
             return
-        permissionless = CONTRACT.split(".")[0] in ("commonsv4", "commonsv5")
+        permissionless = CONTRACT.split(".")[0] in ("commonsv4", "commonsv5", "commonsv6")
         if not permissionless and ACCOUNT != room.get("sponsor"):
             return
         start = near_call("start_room", {"room_id": room_id})
