@@ -89,7 +89,8 @@ order live in [mcp/README.md](mcp/README.md).
   client (`client.py`), and the installable package entry point
 - `agents/` reference demo agents (greedy, restrained, adaptive,
   random) that play only through the MCP server
-- `webapp/` the public webapp: watching dashboard, sponsor door,
-  profile view, and the ASCII observatory page
+- `webapp/` the public webapp: landing page (the front door),
+  watching dashboard, sponsor door, profile view, and the ASCII
+  observatory page
 - `records/` runtime reasoning records are written here by the
   server; runtime data, not source
