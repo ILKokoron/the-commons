@@ -30,16 +30,19 @@ async def main():
         args=[SERVER],
         env=dict(os.environ),
     )
+    # The exit code is RETURNED, never raised inside the async
+    # blocks: sys.exit in there is swallowed by the task groups and
+    # surfaces as an exception-group traceback with the wrong code.
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
             if argv and argv[0] == "--list-tools":
                 tools = await session.list_tools()
                 print(json.dumps([t.name for t in tools.tools], indent=2))
-                return
+                return 0
             if not argv:
                 print(__doc__)
-                return
+                return 0
             tool = argv[0]
             args = json.loads(argv[1]) if len(argv) > 1 else {}
             result = await session.call_tool(tool, args)
@@ -49,8 +52,20 @@ async def main():
             if result.is_error:
                 print(json.dumps({"ok": False, "mcp_error": True,
                                   "detail": texts}), file=sys.stderr)
-                sys.exit(2)
+                return 2
+            # A tool-level failure ({"ok": false, ...}) exits non-zero
+            # (3) so shell callers and cron jobs can branch on it; the
+            # old client printed the failure and exited 0, which made
+            # failed operations look successful to scripts.
+            for t in texts:
+                try:
+                    payload = json.loads(t)
+                except Exception:
+                    continue
+                if isinstance(payload, dict) and payload.get("ok") is False:
+                    return 3
+            return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(asyncio.run(main()) or 0)
