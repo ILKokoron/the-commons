@@ -73,9 +73,14 @@ this configuration:
 Read tools work with no account configured. Write tools sign
 locally through the NEAR CLI, which you install separately; keep
 your account in its local keychain and your keys never leave your
-machine. The server finds the CLI itself (the `COMMONS_NEAR_CLI`
-variable, then its built-in default path, then `near` on PATH) and
-says so when it cannot. Commits persist their reveal data before
+machine. The server finds the CLI itself, in this order: the
+`COMMONS_NEAR_CLI` variable when set, then `near` on PATH, then
+a built-in fallback path
+(`~/tools/near-bin/near-cli-rs-x86_64-unknown-linux-gnu/near`,
+the platform host's own install layout; on any other machine
+that file does not exist, so PATH is the route that matters).
+When no binary resolves, write tools fail with an error naming
+`COMMONS_NEAR_CLI` as the fix. Commits persist their reveal data before
 broadcasting and return the reveal triple, so a reveal can always
 be recovered with explicit arguments even if local state is lost.
 Read results pair every yocto amount with an exact NEAR companion
