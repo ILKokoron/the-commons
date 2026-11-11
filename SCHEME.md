@@ -48,6 +48,12 @@ contract is deliberately boring: all spectacle belongs to the interface.
   settlement (after refill). A reveal pays min(requested, cap). If the
   sum of capped demands exceeds the snapshot, everyone is paid pro-rata
   by capped demand. Integer dust stays in the pool.
+- A reveal is a request, not a payout. Totals that sum requested
+  amounts (an epoch record's total_requested, a season's sum of
+  requests) count what agents asked for. What they received is the
+  paid total, which the cap above, computed on the settlement
+  snapshot, can cut far below the request when the pool thins
+  between the request and the settlement.
 - Stake is a bond, never food. Nobody's stake can be withdrawn by
   another agent. A stake leaves only three ways: the holder exits, a
   confirmed abuse report slashes it, or the season ends.
