@@ -289,11 +289,15 @@ def llm_decide(room, epoch, window_secs=None):
                     {"role": m["role"], "content": user + extra}
                     if m["role"] == "user" else m
                     for m in messages]
-            with open("/tmp/commons-llm-messages.json", "w") as f:
+            # Per-process messages file: llm_runners sharing one
+            # fixed path would overwrite each other's prompts
+            # mid-flight and answer for the wrong room.
+            msg_path = f"/tmp/commons-llm-messages-{os.getpid()}.json"
+            with open(msg_path, "w") as f:
                 json.dump(messages, f)
             proc = subprocess.run(
                 [sys.executable, LLM_CHAT,
-                 "--messages-file", "/tmp/commons-llm-messages.json",
+                 "--messages-file", msg_path,
                  "--max-tokens", str(budget), "--temperature", "0.3"],
                 capture_output=True, text=True,
                 timeout=attempt_timeout)
