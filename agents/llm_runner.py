@@ -116,9 +116,15 @@ def load_state(account, room):
         with open(pending_path) as f:
             pending = json.load(f)
         for entry in pending.values():
-            if int(entry.get("room_id", -1)) != room:
+            # One malformed entry must not abort the whole merge:
+            # skip it and keep recovering the rest.
+            try:
+                if int(entry.get("room_id", -1)) != room:
+                    continue
+                ep = int(entry["epoch"])
+            except Exception:
+                log("pending merge: skipped one malformed entry")
                 continue
-            ep = int(entry["epoch"])
             committed.add(ep)
             if entry.get("revealed"):
                 revealed.add(ep)
@@ -143,8 +149,21 @@ def pending_triple(account, room, epoch):
     try:
         with open(path) as f:
             pending = json.load(f)
-        entry = pending.get(f"{room}:{epoch}")
-        if entry and entry.get("salt"):
+        # The store is keyed by commitment hash, not by
+        # room:epoch (an older lookup by that key could never
+        # find anything). Scan the values for the newest live
+        # entry for this room and epoch.
+        entry = None
+        for cand in pending.values():
+            if not isinstance(cand, dict) or cand.get("superseded"):
+                continue
+            if int(cand.get("room_id", -1)) != int(room):
+                continue
+            if int(cand.get("epoch", -1)) != int(epoch):
+                continue
+            if cand.get("salt"):
+                entry = cand
+        if entry:
             return {"amount": entry["amount"],
                     "reasoning_hash": entry.get("reasoning_hash", ""),
                     "salt": entry["salt"],
@@ -221,7 +240,7 @@ def llm_decide(room, epoch, window_secs=None):
                          "without spending it on an LLM call.")
         pool = int(room["pool_balance"])
         reserve = int(room["refill_reserve"])
-        refill = int(room["refill_per_epoch"])
+        refill = _current_refill(room, epoch)
         feeders = max(1, int(room["feeders_count"]))
         cap_bps = int(room["cap_bps"])
         total_paid = int(room["total_paid_out"])
@@ -328,11 +347,27 @@ def llm_decide(room, epoch, window_secs=None):
                      "rather than guessing.")
 
 
+
+def _current_refill(room, epoch):
+    """The refill that actually moves for this epoch, mirroring
+    the contract: in a Decaying room current_refill shrinks by
+    decay_bps after every settled epoch, floored at
+    refill_floor. Flat rooms always move refill_per_epoch."""
+    base = int(room["refill_per_epoch"])
+    if str(room.get("refill_mode", "flat")).lower() != "decaying":
+        return base
+    decay = int(room.get("decay_bps", 10000))
+    floor = int(room.get("refill_floor", "0"))
+    cur = base
+    for _ in range(int(epoch)):
+        cur = max(floor, cur * decay // 10000)
+    return cur
+
 def decide(strategy, room, epoch):
     """Return (amount_yocto_str, reasoning_text)."""
     pool = int(room["pool_balance"])
     reserve = int(room["refill_reserve"])
-    refill = int(room["refill_per_epoch"])
+    refill = _current_refill(room, epoch)
     feeders = max(1, int(room["feeders_count"]))
     cap_bps = int(room["cap_bps"])
     total_paid = int(room["total_paid_out"])
