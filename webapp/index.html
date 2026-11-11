@@ -292,7 +292,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
   <div class="pagewrap">
 
   <section class="page active" id="overview">
-    <div class="page-head"><div><div class="eyebrow">Workspace / Overview</div><h1>Observe the commons.</h1></div><div class="actions"><span class="tag gray">Watch · v1 + v5</span><button class="btn" onclick="go('rooms')">Browse rooms</button><button class="btn primary" onclick="go('host')">Create room</button></div></div>
+    <div class="page-head"><div><div class="eyebrow">Workspace / Overview</div><h1>Observe the commons.</h1></div><div class="actions"><span class="tag gray">Watch · v1 + v5 + v6</span><button class="btn" onclick="go('rooms')">Browse rooms</button><button class="btn primary" onclick="go('host')">Create room</button></div></div>
     <div class="panel"><div class="panel-title"><div><h2 id="ov-pool-name">Live pool</h2></div><span class="tag" id="ov-pool-tag">Loading</span></div>
         <div class="poolbig"><span id="ov-pool-big">-</span> <small>NEAR</small></div><div class="label">Shared pool balance</div><div class="bar"><span id="ov-bar-pool" style="width:0%"></span><span id="ov-bar-res" style="width:100%"></span></div><div class="legend"><span><i></i><span id="ov-leg-pool">Pool</span></span><span><i></i><span id="ov-leg-res">Refill reserve</span></span></div><div class="waffle" id="ov-tank" style="margin:14px 0 0"></div><div class="label" id="ov-tank-cap" style="margin-top:8px"></div><div class="liveline" id="ov-live-line"></div>
         <div class="rule"><button class="btn" id="ov-open-room">Open room detail →</button></div>
@@ -314,12 +314,12 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
   </section>
 
   <section class="page" id="rooms">
-    <div class="page-head"><div><div class="eyebrow">Workspace / Rooms</div><h1>Rooms</h1></div><div class="actions"><span class="tag gray">Watch · v1 + v5</span><button class="btn primary" onclick="go('host')">Create room</button></div></div>
+    <div class="page-head"><div><div class="eyebrow">Workspace / Rooms</div><h1>Rooms</h1></div><div class="actions"><span class="tag gray">Watch · v1 + v5 + v6</span><button class="btn primary" onclick="go('host')">Create room</button></div></div>
     <div class="grid g3" id="rooms-grid"><div class="room-card"><h3>Loading rooms</h3></div></div>
   </section>
 
   <section class="page" id="room">
-    <div class="page-head"><div><div class="eyebrow" id="rd-eyebrow">Workspace / Room detail</div><h1 id="rd-name">Room detail</h1><p class="intro" id="rd-intro">Select a room to read its record.</p></div><div class="actions"><span class="tag" id="rd-state">Loading</span><span class="tag gray">Watch · v1 + v5</span></div></div>
+    <div class="page-head"><div><div class="eyebrow" id="rd-eyebrow">Workspace / Room detail</div><h1 id="rd-name">Room detail</h1><p class="intro" id="rd-intro">Select a room to read its record.</p></div><div class="actions"><span class="tag" id="rd-state">Loading</span><span class="tag gray">Watch · v1 + v5 + v6</span></div></div>
     <div class="label" style="margin:0 0 6px">Room</div><div class="tabs" id="pk-room"></div>
     <div class="grid g4"><div class="metric"><label>Pool balance</label><strong id="rd-pool">-</strong><small>NEAR</small></div><div class="metric"><label>Feeders</label><strong id="rd-feeders">-</strong><small id="rd-feeders-sub">Seated</small></div><div class="metric"><label>Season epochs</label><strong id="rd-epochs">-</strong><small>Settled / total</small></div><div class="metric"><label>Security agents</label><strong id="rd-security">-</strong><small>Seated</small></div></div>
     <div class="panel" id="rd-live-panel" style="margin-top:10px;display:none"><div class="panel-title"><div><h2>Live now</h2><p id="rd-live-line">Reading the clock</p></div><span class="tag" id="rd-live-phase">-</span></div><div class="bar"><span id="rd-live-bar" style="width:0%"></span><span id="rd-live-bar-rest" style="width:100%"></span></div><div class="legend"><span><i></i><span id="rd-live-legend">Phase progress</span></span><span id="rd-live-count"></span></div></div>
@@ -332,13 +332,13 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
   </section>
 
   <section class="page" id="agents">
-    <div class="page-head"><div><div class="eyebrow">Workspace / Agents</div><h1>Agents</h1></div><div class="actions"><span class="tag" id="ag-tag">Reading</span><span class="tag gray">Watch · v1 + v5</span></div></div>
+    <div class="page-head"><div><div class="eyebrow">Workspace / Agents</div><h1>Agents</h1></div><div class="actions"><span class="tag" id="ag-tag">Reading</span><span class="tag gray">Watch · v1 + v5 + v6</span></div></div>
     <div class="label" style="margin:0 0 6px">Room</div><div class="tabs" id="pk-agents"></div>
     <div class="grid g2" id="ag-grid"><div class="room-card"><h3>Reading agents</h3></div></div>
   </section>
 
   <section class="page" id="epochs">
-    <div class="page-head"><div><div class="eyebrow">Workspace / Epochs & settlement</div><h1>Epochs & settlement</h1></div><div class="actions"><span class="tag">Commit · Reveal · Settle</span><span class="tag gray">Watch · v1 + v5</span></div></div>
+    <div class="page-head"><div><div class="eyebrow">Workspace / Epochs & settlement</div><h1>Epochs & settlement</h1></div><div class="actions"><span class="tag">Commit · Reveal · Settle</span><span class="tag gray">Watch · v1 + v5 + v6</span></div></div>
     <div class="label" style="margin:0 0 6px">Room</div><div class="tabs" id="pk-epochs"></div>
     <div class="split"><div class="panel"><div class="panel-title"><div><h2>Commitment structure</h2></div></div><div class="codebox">sha256(<span class="key">amount</span> + "|" + <span class="key">reasoning_hash</span> + "|" + <span class="key">salt</span>)</div></div>
       <div class="panel"><div class="panel-title"><div><h2>Settlement rules</h2></div></div><div class="kv"><span>Zero reveal</span><b>Legal · restraint</b></div><div class="kv"><span>Demand within snapshot</span><b>Pay valid amount</b></div><div class="kv"><span>Demand exceeds snapshot</span><b>Pro-rata allocation</b></div><div class="kv"><span>Epoch order</span><b>Sequential settlement</b></div></div></div>
@@ -346,9 +346,9 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
   </section>
 
   <section class="page" id="security">
-    <div class="page-head"><div><div class="eyebrow">Workspace / Security</div><h1>Security</h1></div><div class="actions"><span class="tag" id="sec-tag">Reading</span><span class="tag gray">Watch · v1 + v5</span></div></div>
+    <div class="page-head"><div><div class="eyebrow">Workspace / Security</div><h1>Security</h1></div><div class="actions"><span class="tag" id="sec-tag">Reading</span><span class="tag gray">Watch · v1 + v5 + v6</span></div></div>
     <div class="label" style="margin:0 0 6px">Room</div><div class="tabs" id="pk-security"></div>
-    <div class="grid g3"><div class="metric"><label>Security seated</label><strong id="sec-count">-</strong><small>In the selected room</small></div><div class="metric"><label>Security pot</label><strong id="sec-pot">-</strong><small>NEAR held in the room</small></div><div class="metric"><label>Confirm threshold</label><strong id="sec-thresh">-</strong><small>Confirmations needed</small></div></div>
+    <div class="grid g3"><div class="metric"><label>Security seated</label><strong id="sec-count">-</strong><small>In the selected room</small></div><div class="metric"><label>Security pot</label><strong id="sec-pot">-</strong><small>NEAR held in the room</small></div><div class="metric"><label>Confirm threshold</label><strong id="sec-thresh">-</strong><small>For a new report</small></div></div>
     <div class="split"><div class="panel"><div class="panel-title"><div><h2>Security agents</h2></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Agent</th><th>Stake NEAR</th><th>Confirmed reports</th><th>Status</th></tr></thead><tbody id="sec-table"><tr><td>Reading</td><td></td><td></td><td></td></tr></tbody></table></div><div class="notice" id="sec-note" style="margin-top:13px">Agents are found from epoch reveals and reports, then verified on chain.</div></div>
       <div class="panel"><div class="panel-title"><div><h2>Report and confirm flow</h2></div></div><div class="kv"><span>Report</span><b>A security agent reports, with evidence</b></div><div class="kv"><span>Confirm</span><b>Other security agents confirm</b></div><div class="kv"><span>Threshold</span><b>floor(security / 2) + 1</b></div><div class="kv"><span>On confirmation</span><b id="sec-slash-kv">To the security pot · feeder deactivated</b></div><div class="kv"><span>Early exit</span><b id="sec-tax-kv">To the security pot</b></div><div class="kv"><span>Retainer</span><b id="sec-retainer-kv">Reading</b></div></div></div>
     <div class="notice" style="margin-top:10px">Security is an economic and procedural layer, not a guarantee that collusion or false reporting is impossible. The mechanism depends on independent operators and correct evidence handling.</div>
@@ -365,7 +365,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
   </section>
 
   <section class="page" id="replay">
-    <div class="page-head"><div><div class="eyebrow">Workspace / Data & replay</div><h1>Data & replay</h1></div><div class="actions"><span class="tag">Season replay</span><span class="tag gray">Watch · v1 + v5</span></div></div>
+    <div class="page-head"><div><div class="eyebrow">Workspace / Data & replay</div><h1>Data & replay</h1></div><div class="actions"><span class="tag">Season replay</span><span class="tag gray">Watch · v1 + v5 + v6</span></div></div>
     <div class="label" style="margin:0 0 6px">Room</div><div class="tabs" id="pk-replay"></div>
     <div class="panel"><div class="panel-title"><div><h2>Season replay</h2><p id="rpl-sub">Finished rooms only</p></div><span class="tag gray" id="rpl-state">Reading</span></div><div id="replay-box"><div class="notice">Reading rooms from the chain.</div></div></div>
   </section>
@@ -1172,11 +1172,27 @@ function selectForFeed(events, { maxPerEpoch = 3 } = {}) {
 // stream, so there is no honest epoch to attach a D8 line to yet. detectAll
 // is called with no security events until that source exists.
 
-function commonsRoom(chainRoom) {
-  const seed =
-    BigInt(chainRoom.pool_balance) +
-    BigInt(chainRoom.refill_reserve) +
-    BigInt(chainRoom.total_paid_out);
+/* One seed rule for every surface (the app's seedOf delegates here).
+   While any money is still in the room or the season has not ended,
+   the seed is the identity pool + reserve + paid out. For an ended
+   room whose residue has left, the identity collapses to
+   total_paid_out alone; there, reconstruct from epoch 0 (its
+   starting pool times 5, the 20 percent split). */
+function seedFromParts(room, e0) {
+  const exact =
+    BigInt(room.pool_balance) +
+    BigInt(room.refill_reserve) +
+    BigInt(room.total_paid_out);
+  if (BigInt(room.pool_balance) + BigInt(room.refill_reserve) > 0n || !room.ended) return exact;
+  if (e0) {
+    const startPool = BigInt(e0.pool_after) - BigInt(e0.refill_moved) + BigInt(e0.total_paid);
+    if (startPool > 0n) return startPool * 5n;
+  }
+  return exact;
+}
+
+function commonsRoom(chainRoom, e0) {
+  const seed = seedFromParts(chainRoom, e0);
   return {
     id: chainRoom.id,
     epochsTotal: chainRoom.season_epochs,
@@ -1213,7 +1229,7 @@ function commonsRecords(chainEpochs) {
   return chainEpochs.map(commonsRecord);
 }
 
-return { detectAll: detectAll, selectForFeed: selectForFeed, commonsRoom: commonsRoom, commonsRecords: commonsRecords };
+return { detectAll: detectAll, selectForFeed: selectForFeed, commonsRoom: commonsRoom, commonsRecords: commonsRecords, seedFromParts: seedFromParts };
 })();
 </script>
 <script>
@@ -1298,6 +1314,13 @@ function fmtNear(yoctoStr){
     var whole = v / YOCTO;
     var frac = (v % YOCTO).toString().padStart(24,"0").slice(0,6).replace(/0+$/,"");
     var out = whole.toString() + (frac ? "."+frac : "");
+    if(out === "0" && v !== 0n){
+      /* A non-zero amount under 0.000001 NEAR (a few hundred yocto,
+         say a drained refill reserve) must not render as "0": widen
+         to full precision, the same rule near() follows. */
+      var f24 = (v % YOCTO).toString().padStart(24,"0").replace(/0+$/,"");
+      if(f24) out = whole.toString() + "." + f24;
+    }
     return (neg ? "-" : "") + out;
   }catch(e){ return String(yoctoStr); }
 }
@@ -1365,16 +1388,13 @@ function seedOf(room){
      residue withdrawn), where the identity degrades to
      total_paid_out alone; on v1 rooms the split differed and
      the two definitions disagreed by up to 2x. */
-  var exact = big(room.pool_balance) + big(room.refill_reserve) + big(room.total_paid_out);
-  if(big(room.pool_balance) + big(room.refill_reserve) > 0n || !room.ended) return exact;
   var eps = state.epochsByRoom[room.id] || [];
   var e0 = null;
   eps.forEach(function(e){ if(e.epoch === 0) e0 = e; });
-  if(e0){
-    var startPool = big(e0.pool_after) - big(e0.refill_moved) + big(e0.total_paid);
-    if(startPool > 0n) return startPool * 5n;
+  try { return Chronicle.seedFromParts(room, e0); }
+  catch(err) {
+    return big(room.pool_balance) + big(room.refill_reserve) + big(room.total_paid_out);
   }
-  return exact;
 }
 function poolPct(room){
   var seed = seedOf(room);
@@ -1762,7 +1782,9 @@ function chronicleFeedHTML(room, epochs, limit){
     var lastEp = epochs[epochs.length - 1];
     var key = room.id + ":" + epochs.length + ":" + lastEp.epoch + ":" + lastEp.total_paid;
     if(state._chronCache && state._chronCache.key === key) return capFeed(state._chronCache.html, limit);
-    var cRoom = Chronicle.commonsRoom(room);
+    var e0rec = null;
+    epochs.forEach(function(e){ if(e.epoch === 0) e0rec = e; });
+    var cRoom = Chronicle.commonsRoom(room, e0rec);
     var records = Chronicle.commonsRecords(epochs);
     var events = Chronicle.detectAll(cRoom, records, []);
     var sel = Chronicle.selectForFeed(events, { maxPerEpoch: 2 });
@@ -1772,10 +1794,10 @@ function chronicleFeedHTML(room, epochs, limit){
     sel.folded.forEach(function(f){ foldedByEpoch[f.epoch] = f.count; });
     var badge = { confirmed: "Confirmed", observed_pattern: "Pattern", projection: "Projection" };
     var rows = shown.map(function(x){
-      return { epoch: x.epoch - 1, html: '<div class="event"><i class="eventdot"></i><div><b>' + esc(x.text) + '</b><small>Epoch ' + (x.epoch - 1) + ' · ' + (badge[x.confidence] || x.confidence) + (x.agent ? ' · ' + esc(shortAcct(x.agent)) : '') + '</small></div></div>' };
+      return { epoch: x.epoch, html: '<div class="event"><i class="eventdot"></i><div><b>' + esc(x.text) + '</b><small>Epoch ' + x.epoch + ' · ' + (badge[x.confidence] || x.confidence) + (x.agent ? ' · ' + esc(shortAcct(x.agent)) : '') + '</small></div></div>' };
     });
     Object.keys(foldedByEpoch).forEach(function(dep){
-      var chainEp = Number(dep) - 1;
+      var chainEp = Number(dep);
       rows.push({ epoch: chainEp, html: '<div class="event"><i class="eventdot"></i><div><b>+' + foldedByEpoch[dep] + ' more observations</b><small>Epoch ' + chainEp + '</small></div></div>' });
     });
     rows.sort(function(a, b){ return b.epoch - a.epoch; });
@@ -1908,9 +1930,6 @@ function renderOverview(){
     setText("ov-leg-pool", "Pool · " + fmtNear(lr.pool_balance) + " NEAR");
     setText("ov-leg-res", "Refill reserve · " + fmtNear(lr.refill_reserve) + " NEAR");
     paintOvTank();
-    setNum("ov-feeders", String(lr.feeders_count));
-    setNum("ov-security", String(lr.security_count));
-    setText("ov-epoch2", (cur && !roomFinished(lr)) ? (Math.min(cur.epoch, lr.season_epochs) + " / " + lr.season_epochs) : (lr.next_epoch_to_settle + " / " + lr.season_epochs));
     var epochs = (state.epochsByRoom[lr.id] || []).slice().sort(function(a,b){ return a.epoch - b.epoch; });
     setHTML("ov-feed", chronicleFeedHTML(lr, epochs, 8) || feedHTML(buildDrama(lr, epochs), 8));
     renderOverviewChart(lr, epochs);
@@ -2181,7 +2200,6 @@ function renderEpochs(){
   else if(st.loading) note = '<div class="notice" style="margin-top:12px">Loading the remaining epoch records…</div>';
   var det = $("ep-detail");
   if(det && !det.getAttribute("data-open")) det.innerHTML = note;
-  else if(det) det.setAttribute("data-note", note);
 }
 /* ASCII tank, shared by Room detail (live) and Epochs (per epoch). frac is
    the water left as a share of everything the room ever held; poolFrac is
@@ -2931,6 +2949,22 @@ function selectRoom(id){
     loadAgentsAndProfiles(room);
   });
 }
+/* Page through a contract's whole room list: one list_rooms call
+   caps at 50 rows, and a contract past 50 rooms would silently lose
+   its newest rooms from the observatory. Mirrors the host panel's
+   pagination (listMyRoomsPage). */
+function listRoomsPaged(fetchPage){
+  var acc = [];
+  function step(from){
+    return fetchPage(from).then(function(rows){
+      rows = rows || [];
+      acc = acc.concat(rows);
+      if(rows.length === 50 && acc.length < 1000) return step(from + 50);
+      return acc;
+    });
+  }
+  return step(0);
+}
 function refresh(){
   var cfgJobs = [
     rpc("get_config", {}).then(function(c){ if(c) state.cfg1 = c; }).catch(function(){}),
@@ -2940,7 +2974,7 @@ function refresh(){
     /* A throttled list_rooms read must not kill the whole refresh:
        fall back to the rooms already on screen so the rest of the
        cycle (epochs, agents, boards) still runs. */
-    return rpc("list_rooms", {from_index:0, limit:50}).catch(function(){
+    return listRoomsPaged(function(from){ return rpc("list_rooms", {from_index:from, limit:50}); }).catch(function(){
       return (state.rooms || []).filter(function(x){ return roomContract(x) === CONTRACT; });
     });
   }).then(function(rooms){
@@ -2951,7 +2985,7 @@ function refresh(){
        v5 rooms carry their contract and contract-local id; their app id
        is offset by 1000 so the per-room state maps never collide with
        v1 rooms of the same number. Cancelled rooms stay host-only. */
-    return rpcRetryC(S5, "list_rooms", {from_index:0, limit:50}, 3).then(function(v5rooms){
+    return listRoomsPaged(function(from){ return rpcRetryC(S5, "list_rooms", {from_index:from, limit:50}, 3); }).then(function(v5rooms){
       (v5rooms || []).forEach(function(r){
         if(r.cancelled) return;
         r.contract = S5; r.cid = r.id; r.id = 1000 + r.id;
@@ -2961,7 +2995,7 @@ function refresh(){
       prevV5.forEach(function(r){ merged.push(r); });
     }).then(function(){
       var prevV6 = (state.rooms || []).filter(function(x){ return x.contract === S6; });
-      return rpcRetryC(S6, "list_rooms", {from_index:0, limit:50}, 3).then(function(v6rooms){
+      return listRoomsPaged(function(from){ return rpcRetryC(S6, "list_rooms", {from_index:from, limit:50}, 3); }).then(function(v6rooms){
         (v6rooms || []).forEach(function(r){
           if(r.cancelled) return;
           r.contract = S6; r.cid = r.id; r.id = 2000 + r.id;
@@ -3047,13 +3081,13 @@ function paintWallet(){
   }
   refreshCreateState();
   if(accountId) loadMyRooms();
-  else document.getElementById("myRooms").innerHTML = "<p class='sub'>Connect your wallet to see the rooms hosted by your account.</p>";
+  else document.getElementById("myRooms").innerHTML = "<p class='muted'>Connect your wallet to see the rooms hosted by your account.</p>";
 }
 async function ensureSelector(){
   if(selector) return selector;
   selector = await setupWalletSelector({
     network: "testnet",
-    contractId: S5,
+    contractId: S6,
     modules: [
       setupHereWallet(),
       setupSender(),
@@ -3061,7 +3095,7 @@ async function ensureSelector(){
       setupNightly(),
     ],
   });
-  modal = setupModal(selector, { contractId: S5 });
+  modal = setupModal(selector, { contractId: S6 });
   var accounts = selector.store.getState().accounts;
   accountId = accounts && accounts[0] ? accounts[0].accountId : null;
   if(accountId) refreshCachedWallet();
@@ -3427,7 +3461,7 @@ function renderMyRooms(rooms){
   var box = document.getElementById("myRooms");
   var mine = rooms.filter(function(r){ return r.sponsor === accountId; });
   if(!mine.length){
-    box.innerHTML = "<p class='sub'>No rooms hosted by " + esc(accountId) + " yet. Create the first one above.</p>";
+    box.innerHTML = "<p class='muted'>No rooms hosted by " + esc(accountId) + " yet. Create the first one above.</p>";
     return;
   }
   box.innerHTML = "";
@@ -3526,7 +3560,7 @@ function loadMyRooms(){
     renderMyRooms(parts[0].concat(parts[1]).concat(parts[2]));
   }).catch(function(e){
     roomsLoading = false;
-    document.getElementById("myRooms").innerHTML = "<p class='sub'>Could not load rooms: " + esc(e.message) + "</p>";
+    document.getElementById("myRooms").innerHTML = "<p class='muted'>Could not load rooms: " + esc(e.message) + "</p>";
   });
 }
 
