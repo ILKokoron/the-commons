@@ -290,17 +290,22 @@ def main() -> int:
         return 1
     settled = int(room["next_epoch_to_settle"])
 
-    # Index local records for this room by (epoch, agent), keep raw bytes for hashing.
+    # Index local records for this room by (epoch, agent), keep raw
+    # bytes for hashing. The MCP writes reasoning records
+    # content-addressed ({reasoning_hash}.json), so index by
+    # content: the room{room}-epoch*-*.json name pattern only ever
+    # matched the old smoke-test demo logs, and a name-based scan
+    # silently certified nothing.
     records = {}
-    for path in sorted(ns.records_dir.glob(f"room{room_id}-epoch*-*.json")):
+    for path in sorted(ns.records_dir.glob("*.json")):
         raw = path.read_bytes()
         try:
             rec = json.loads(raw.decode())
+            if int(rec.get("room_id", -1)) != room_id:
+                continue
+            key = (int(rec["epoch"]), rec["agent"])
         except Exception:
             continue
-        if int(rec.get("room_id", -1)) != room_id:
-            continue
-        key = (int(rec["epoch"]), rec["agent"])
         records[key] = {"path": path, "raw": raw, "rec": rec,
                         "sha256": hashlib.sha256(raw).hexdigest(),
                         "source": "local"}
