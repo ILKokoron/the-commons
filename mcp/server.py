@@ -11,8 +11,8 @@ Configuration comes from the environment:
   COMMONS_CONTRACT     contract account. The default comes from
                        the shared registry in contracts.json and is
                        the current contract,
-                       commonsv6.bindingvow1106.testnet. Naming a
-                       known-old contract (v1 to v4) makes the server
+                       commonsv7.bindingvow1106.testnet. Naming a
+                       known-old contract (v1 to v6) makes the server
                        refuse to start, because those contracts are
                        history, watchable through the webapp and the
                        exporter but no longer operated; set
@@ -88,13 +88,14 @@ def _load_registry():
             return json.load(f)
     except Exception:
         return {
-            "default": "commonsv6.bindingvow1106.testnet",
+            "default": "commonsv7.bindingvow1106.testnet",
             "known_old": [
                 "commons.bindingvow1106.testnet",
                 "commonsv2.bindingvow1106.testnet",
                 "commonsv3.bindingvow1106.testnet",
                 "commonsv4.bindingvow1106.testnet",
                 "commonsv5.bindingvow1106.testnet",
+                "commonsv6.bindingvow1106.testnet",
             ],
             "contracts": {
                 "v1": "commons.bindingvow1106.testnet",
@@ -103,6 +104,7 @@ def _load_registry():
                 "v4": "commonsv4.bindingvow1106.testnet",
                 "v5": "commonsv5.bindingvow1106.testnet",
                 "v6": "commonsv6.bindingvow1106.testnet",
+                "v7": "commonsv7.bindingvow1106.testnet",
             },
             "store_url":
                 "https://the-commons-store-ilkokorons-projects.vercel.app",
@@ -112,7 +114,7 @@ def _load_registry():
 REGISTRY = _load_registry()
 ACCOUNT = os.environ.get("COMMONS_ACCOUNT_ID", "")
 CONTRACT = os.environ.get("COMMONS_CONTRACT", "") \
-    or REGISTRY.get("default", "commonsv6.bindingvow1106.testnet")
+    or REGISTRY.get("default", "commonsv7.bindingvow1106.testnet")
 CONTRACT_IS_OLD = CONTRACT in REGISTRY.get("known_old", [])
 NETWORK = os.environ.get("COMMONS_NETWORK", "testnet")
 
@@ -123,7 +125,7 @@ def _contract_flavor():
     """(version, v45, v6) for the configured contract: which
     argument set and behavioural gates apply. v45 means the v4+
     feature set (Guarantee Fund coverage, refill modes); v6 marks
-    the current contract exactly.
+    the current contract class (v6 and later).
 
     The version comes from the shared registry's contracts map,
     never from splitting the account name. For a contract the
@@ -152,7 +154,7 @@ def _contract_flavor():
             cfg = None
         ver = 4 if isinstance(cfg, dict) and "gas_per_epoch" in cfg \
             else 1
-    _FLAVOR = (ver, ver >= 4, ver == 6)
+    _FLAVOR = (ver, ver >= 4, ver >= 6)
     return _FLAVOR
 RECORDS_DIR = os.path.expanduser(
     os.environ.get("COMMONS_RECORDS_DIR", "~/workspace/the-commons/records")
@@ -480,7 +482,13 @@ def _tx_outcome(tx_hash, signer):
 # finalize_room settles every remaining epoch inside one call, so
 # its gas need grows with the unsettled backlog; the flat 30 TGas
 # that suits the single-step calls can starve it on a large room.
-GAS_BY_METHOD = {"finalize_room": "300 TeraGas"}
+# settle_epoch joins finalize at the protocol maximum: settling
+# one epoch costs roughly 0.75 TGas per revealer (measured in the
+# 2026-11-11 audit), so the old 30 TGas default ceilinged a settle
+# at about 40 revealers. Prepaid gas is a cap, not a charge; only
+# burnt gas is paid.
+GAS_BY_METHOD = {"finalize_room": "300 TeraGas",
+                 "settle_epoch": "300 TeraGas"}
 
 
 def near_call(fn, args, deposit_yocto=0):
@@ -1585,11 +1593,20 @@ def commons_withdraw_residue(room_id: int) -> dict:
     try:
         room = view("get_room", {"room_id": room_id})
         res["room_after"] = room
-        if not room or not room.get("residue_withdrawn"):
+        # The v7 room view exposes residue_withdrawn; the v6 view
+        # never did, so against v6 rooms fall back to the
+        # withdraw's own invariant: an ended room whose pool and
+        # refill reserve both read zero.
+        withdrawn = bool(room) and (
+            room.get("residue_withdrawn")
+            or (room.get("ended")
+                and room.get("pool_balance") == "0"
+                and room.get("refill_reserve") == "0"))
+        if not withdrawn:
             res["ok"] = False
             res["verified"] = False
-            res["error"] = ("read-back mismatch: residue_withdrawn "
-                            "is not set after withdraw_residue")
+            res["error"] = ("read-back mismatch: residue not "
+                            "withdrawn after withdraw_residue")
         else:
             res["verified"] = True
     except Exception as e:
