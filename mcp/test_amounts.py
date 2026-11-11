@@ -46,6 +46,12 @@ assert server.to_yocto(0) == 0
 BAD_CASES = [
     "-1", "-0.5", "+1", "1e-3", "1.5_yocto", "_yocto", "", "abc",
     "1,5", "1.0000000000000000000000001", "1..0", "0x10", "  ",
+    # A dot-less string of 20+ digits is a raw yocto count in every
+    # realistic case; read as NEAR it would be scaled by 1e24 and
+    # overflow on chain (the post-upgrade feeder breakage). The
+    # explicit "_yocto" form above stays the way to send it.
+    "500500000000000000000000",
+    "10000000000000000000",
 ]
 for text in BAD_CASES:
     try:
