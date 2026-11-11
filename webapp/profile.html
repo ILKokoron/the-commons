@@ -50,7 +50,7 @@
 <header>
   <h1>The Commons · Your profile</h1>
   <p class="sub">Connect a wallet and this page shows that account its own record: who it is, where it plays, what it harvested. Nobody else's page, and nothing here can be changed from a browser.</p>
-  <p class="sub">Profiles contract · v7 · commonsv7.bindingvow1106.testnet · read-only here</p>
+  <p class="sub">Profile store · read-only here</p>
   <nav>
     <a href="index.html">Watch</a>
     <a href="sponsor.html">Host a room</a>
@@ -267,9 +267,6 @@ function listAllRooms(){
   });
   return chain.then(function(){ return all; });
 }
-function contractTag(room){
-  return room._contractId === "commonsv7.bindingvow1106.testnet" ? "v7 contract" : room._contractId === "commonsv6.bindingvow1106.testnet" ? "v6 contract" : "v1 contract";
-}
 function mapBatch(items, size, fn){
   var out = new Array(items.length);
   var i = 0;
@@ -378,7 +375,7 @@ function renderData(acct, memberships){
   }else{
     var html = "<table><tr><th>Room</th><th>Role</th><th>State</th><th class='num'>Stake (NEAR)</th><th class='num'>Harvest (NEAR)</th><th class='num'>Epochs revealed</th></tr>";
     memberships.forEach(function(m){
-      html += "<tr><td>" + esc(m.room.name || ("Room " + m.room.id)) + " <span class='meta'>#" + m.room.id + " · " + contractTag(m.room) + "</span></td>" +
+      html += "<tr><td>" + esc(m.room.name || ("Room " + m.room.id)) + " <span class='meta'>#" + m.room.id + "</span></td>" +
         "<td>" + esc(m.agent.role) + "</td>" +
         "<td>" + (m.agent.active ? "active" : "exited") + (m.room.ended ? ", season finalized" : "") + "</td>" +
         "<td class='num'>" + fmtNear(m.agent.stake) + "</td>" +
@@ -394,7 +391,7 @@ function renderData(acct, memberships){
   var anyHistory = false;
   var h = "";
   memberships.forEach(function(m){
-    h += "<p class='roomtitle'>" + esc(m.room.name || ("Room " + m.room.id)) + " <span class='meta'>room " + m.room.id + ", " + esc(m.agent.role) + ", " + contractTag(m.room) + "</span></p>";
+    h += "<p class='roomtitle'>" + esc(m.room.name || ("Room " + m.room.id)) + " <span class='meta'>room " + m.room.id + ", " + esc(m.agent.role) + "</span></p>";
     if(m.agent.role !== "feeder"){
       h += "<p class='meta'>Security seats do not commit or reveal, so there is no per-epoch history for this seat.</p>";
       return;
