@@ -95,6 +95,14 @@ def _load_registry():
                 "commonsv4.bindingvow1106.testnet",
                 "commonsv5.bindingvow1106.testnet",
             ],
+            "contracts": {
+                "v1": "commons.bindingvow1106.testnet",
+                "v2": "commonsv2.bindingvow1106.testnet",
+                "v3": "commonsv3.bindingvow1106.testnet",
+                "v4": "commonsv4.bindingvow1106.testnet",
+                "v5": "commonsv5.bindingvow1106.testnet",
+                "v6": "commonsv6.bindingvow1106.testnet",
+            },
             "store_url":
                 "https://the-commons-store-ilkokorons-projects.vercel.app",
         }
@@ -106,6 +114,45 @@ CONTRACT = os.environ.get("COMMONS_CONTRACT", "") \
     or REGISTRY.get("default", "commonsv6.bindingvow1106.testnet")
 CONTRACT_IS_OLD = CONTRACT in REGISTRY.get("known_old", [])
 NETWORK = os.environ.get("COMMONS_NETWORK", "testnet")
+
+_FLAVOR = None
+
+
+def _contract_flavor():
+    """(version, v45, v6) for the configured contract: which
+    argument set and behavioural gates apply. v45 means the v4+
+    feature set (Guarantee Fund coverage, refill modes); v6 marks
+    the current contract exactly.
+
+    The version comes from the shared registry's contracts map,
+    never from splitting the account name. For a contract the
+    registry does not know, fall back to a get_config probe: a
+    config carrying gas_per_epoch is v4-class; anything else is
+    treated as v1-class. The probe cannot tell v5 from v6, so an
+    unregistered contract never gets v6 semantics; register it in
+    contracts.json for the exact flavour. Resolved once per
+    process."""
+    global _FLAVOR
+    if _FLAVOR is not None:
+        return _FLAVOR
+    ver = 0
+    for tag, acct in (REGISTRY.get("contracts") or {}).items():
+        if acct == CONTRACT:
+            try:
+                ver = int(str(tag).lstrip("vV"))
+            except ValueError:
+                ver = 0
+            break
+    if not ver:
+        cfg = None
+        try:
+            cfg = view("get_config", {})
+        except Exception:
+            cfg = None
+        ver = 4 if isinstance(cfg, dict) and "gas_per_epoch" in cfg \
+            else 1
+    _FLAVOR = (ver, ver >= 4, ver == 6)
+    return _FLAVOR
 RECORDS_DIR = os.path.expanduser(
     os.environ.get("COMMONS_RECORDS_DIR", "~/workspace/the-commons/records")
 )
