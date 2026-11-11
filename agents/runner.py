@@ -377,7 +377,7 @@ async def main():
                             res = await game_call(
                                 session, "commons_commit", {
                                     "room_id": args.room,
-                                    "amount": amount,
+                                    "amount_yocto": amount,
                                     "reasoning": text,
                                     "strategy": args.strategy},
                                 "commit", epoch)
@@ -412,7 +412,7 @@ async def main():
                             triple = triples.get(epoch)
                             if triple and triple.get("salt"):
                                 rargs.update({
-                                    "amount": triple["amount"],
+                                    "amount_yocto": triple["amount"],
                                     "reasoning_hash":
                                         triple["reasoning_hash"],
                                     "salt": triple["salt"],
