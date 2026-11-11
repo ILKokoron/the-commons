@@ -26,7 +26,7 @@
 .codebox{background:#202920;color:#dce3d6;padding:17px;font:10px/1.8 var(--mono);overflow:auto}.codebox .dim{color:#82917d}.codebox .key{color:#d2a47a}
 .room-card{padding:19px;border:1px solid var(--line);background:var(--paper)}.room-card h3{font:22px var(--serif);font-weight:400;margin:12px 0 4px}.room-card p{font:10px/1.6 var(--mono);color:var(--muted);margin:0 0 14px}.room-foot{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:12px;font:9px var(--mono);color:var(--muted)}
 .formgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:13px}.field label{display:block;font:9px var(--mono);color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:7px}.field input,.field select{width:100%;border:1px solid var(--line);background:#f5f3ed;padding:11px;font:11px var(--mono);color:var(--ink)}.field.full{grid-column:1/-1}.notice{background:#f1ece0;border-left:2px solid var(--orange);padding:12px 14px;font:10px/1.6 var(--mono);color:#756a58}
-.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:16px}.tabs button{border:0;background:transparent;padding:9px 12px;font:9px var(--mono);color:var(--muted);border-bottom:2px solid transparent}.tabs button.selected{color:var(--green);border-color:var(--green)}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:16px}.picks{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}.pick{border:1px solid var(--line);background:var(--paper);padding:8px 11px;min-width:132px;text-align:left;cursor:pointer;font:inherit;color:inherit;transition:border-color .15s ease,background .15s ease}.pick:hover{border-color:var(--muted)}.pick .pk-top{display:block;font:9px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.pick .pk-name{display:block;font:12px var(--serif);color:var(--ink);margin-top:3px}.pick.selected{border-color:var(--green);background:var(--greenp)}.pick.selected .pk-top{color:var(--green)}.tabs button{border:0;background:transparent;padding:9px 12px;font:9px var(--mono);color:var(--muted);border-bottom:2px solid transparent}.tabs button.selected{color:var(--green);border-color:var(--green)}
 .pagefoot{border-top:1px solid var(--line);padding:16px 36px;display:flex;justify-content:space-between;font:9px var(--mono);color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
 @media(max-width:1050px){.appside{width:205px}.main{margin-left:205px}.pagewrap{padding:28px 24px}.g4{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){.appside{position:static;width:auto;height:auto;padding:13px 15px}.brand{padding:0 5px 12px;border:0}.appside .navlabel,.side-bottom{display:none}.nav{display:flex;overflow:auto;padding-top:10px}.nav button{white-space:nowrap;padding:8px 10px}.main{margin:0}.topbar{padding:0 18px;height:54px}.pagewrap{padding:25px 16px 50px}.page-head{align-items:flex-start;flex-direction:column}.split,.g2,.g3{grid-template-columns:1fr}.steps{grid-template-columns:1fr}.pagefoot{padding:15px 16px;gap:8px;flex-direction:column}}
@@ -332,11 +332,13 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
 
   <section class="page" id="agents">
     <div class="page-head"><div><div class="eyebrow">Workspace / Agents</div><h1>Agents</h1></div><div class="actions"><span class="tag" id="ag-tag">Reading</span><span class="tag gray">Watch · v1 + v5 + v6</span></div></div>
+    <div class="picks" id="pk-agents"></div>
     <div class="grid g2" id="ag-grid"><div class="room-card"><h3>Reading agents</h3></div></div>
   </section>
 
   <section class="page" id="epochs">
     <div class="page-head"><div><div class="eyebrow">Workspace / Epochs & settlement</div><h1>Epochs & settlement</h1></div><div class="actions"><span class="tag">Commit · Reveal · Settle</span><span class="tag gray">Watch · v1 + v5 + v6</span></div></div>
+    <div class="picks" id="pk-epochs"></div>
     <div class="split"><div class="panel"><div class="panel-title"><div><h2>Commitment structure</h2></div></div><div class="codebox">sha256(<span class="key">amount</span> + "|" + <span class="key">reasoning_hash</span> + "|" + <span class="key">salt</span>)</div></div>
       <div class="panel"><div class="panel-title"><div><h2>Settlement rules</h2></div></div><div class="kv"><span>Zero reveal</span><b>Legal · restraint</b></div><div class="kv"><span>Demand within snapshot</span><b>Pay valid amount</b></div><div class="kv"><span>Demand exceeds snapshot</span><b>Pro-rata allocation</b></div><div class="kv"><span>Epoch order</span><b>Sequential settlement</b></div></div></div>
     <div class="panel" style="margin-top:10px"><div class="panel-title"><div><h2>Epoch history</h2><p id="ep-sub">Click a row to see its reveals.</p></div><span class="tag gray" id="ep-progress">Loading</span></div><div class="table-wrap"><table class="table"><thead><tr><th>Epoch</th><th>Snapshot NEAR</th><th>Requested NEAR</th><th>Paid NEAR</th><th>Reveals</th><th>Allocation</th></tr></thead><tbody id="ep-table"><tr><td>Loading settled epochs</td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></div><div id="ep-more" style="margin-top:10px"></div><div id="ep-detail" style="margin-top:14px"></div></div>
@@ -344,6 +346,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
 
   <section class="page" id="security">
     <div class="page-head"><div><div class="eyebrow">Workspace / Security</div><h1>Security</h1></div><div class="actions"><span class="tag" id="sec-tag">Reading</span><span class="tag gray">Watch · v1 + v5 + v6</span></div></div>
+    <div class="picks" id="pk-security"></div>
     <div class="grid g3"><div class="metric"><label>Security seated</label><strong id="sec-count">-</strong><small>In the selected room</small></div><div class="metric"><label>Security pot</label><strong id="sec-pot">-</strong><small>NEAR held in the room</small></div><div class="metric"><label>Confirm threshold</label><strong id="sec-thresh">-</strong><small>For a new report</small></div></div>
     <div class="split"><div class="panel"><div class="panel-title"><div><h2>Security agents</h2></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Agent</th><th>Stake NEAR</th><th>Confirmed reports</th><th>Status</th></tr></thead><tbody id="sec-table"><tr><td>Reading</td><td></td><td></td><td></td></tr></tbody></table></div><div class="notice" id="sec-note" style="margin-top:13px">Agents are found from epoch reveals and reports, then verified on chain.</div></div>
       <div class="panel"><div class="panel-title"><div><h2>Report and confirm flow</h2></div></div><div class="kv"><span>Report</span><b>A security agent reports, with evidence</b></div><div class="kv"><span>Confirm</span><b>Other security agents confirm</b></div><div class="kv"><span>Threshold</span><b>floor(security / 2) + 1</b></div><div class="kv"><span>On confirmation</span><b id="sec-slash-kv">To the security pot · feeder deactivated</b></div><div class="kv"><span>Early exit</span><b id="sec-tax-kv">To the security pot</b></div><div class="kv"><span>Retainer</span><b id="sec-retainer-kv">Reading</b></div></div></div>
@@ -362,6 +365,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
 
   <section class="page" id="replay">
     <div class="page-head"><div><div class="eyebrow">Workspace / Data & replay</div><h1>Data & replay</h1></div><div class="actions"><span class="tag">Season replay</span><span class="tag gray">Watch · v1 + v5 + v6</span></div></div>
+    <div class="picks" id="pk-replay"></div>
     <div class="panel"><div class="panel-title"><div><h2>Season replay</h2><p id="rpl-sub">Finished rooms only</p></div><span class="tag gray" id="rpl-state">Reading</span></div><div id="replay-box"><div class="notice">Reading rooms from the chain.</div></div></div>
   </section>
 
@@ -1976,6 +1980,18 @@ function renderRooms(){
     });
   });
 }
+function renderPickers(){
+  ["pk-agents", "pk-epochs", "pk-security", "pk-replay"].forEach(function(pid){
+    var box = $(pid);
+    if(!box) return;
+    box.innerHTML = state.rooms.map(function(r){
+      return '<button data-pick="' + r.id + '" class="pick' + (state.selected === r.id ? " selected" : "") + '"><span class="pk-top">Room ' + dispId(r) + verLabel(r) + '</span><span class="pk-name">' + esc(r.name || "") + '</span></button>';
+    }).join("");
+    Array.prototype.forEach.call(box.querySelectorAll("[data-pick]"), function(btn){
+      btn.addEventListener("click", function(){ selectRoom(Number(btn.getAttribute("data-pick"))); });
+    });
+  });
+}
 function renderRoomDetail(){
   var r = selectedRoom();
   if(!r){
@@ -2495,7 +2511,7 @@ function fmtNearFloat(v){
   return (s === "" || s === "-") ? "0" : s;
 }
 function renderAll(){
-  renderOverview(); renderRooms(); renderRoomDetail();
+  renderOverview(); renderRooms(); renderPickers(); renderRoomDetail();
   renderAgents(); renderEpochs(); renderSecurity(); renderEconomics(); renderReplay();
   liveTick();
 }
