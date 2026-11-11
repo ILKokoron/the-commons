@@ -15,6 +15,7 @@ agents/state/pids/<account>.pid. Liveness is checked against
 /proc/<pid>/cmdline so a recycled pid is never mistaken for a runner.
 """
 
+import fcntl
 import os
 import subprocess
 import sys
@@ -25,7 +26,7 @@ VENV_PY = os.path.join(ROOT, "venv", "bin", "python")
 RUNNER = os.path.join(HERE, "runner.py")
 STATE_DIR = os.path.join(HERE, "state")
 PID_DIR = os.path.join(STATE_DIR, "pids")
-ROOM = 2
+ROOM = int(os.environ.get("COMMONS_ROOM_ID", "2"))
 
 # (account, strategy, log file name inside agents/logs/)
 FLEET = [
@@ -109,6 +110,14 @@ def main():
         return 2
     cmd = sys.argv[1]
     only = sys.argv[2] if len(sys.argv) > 2 else None
+    if cmd == "start":
+        # Serialize concurrent starts: two overlapping invocations
+        # could otherwise both pass the already-running check and
+        # spawn two runners for one account on one state file.
+        os.makedirs(PID_DIR, exist_ok=True)
+        _lock_fd = os.open(os.path.join(PID_DIR, "start.lock"),
+                           os.O_CREAT | os.O_RDWR)
+        fcntl.flock(_lock_fd, fcntl.LOCK_EX)
     for account, strategy, logname in FLEET:
         if only and account != only:
             continue
