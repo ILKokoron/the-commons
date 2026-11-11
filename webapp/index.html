@@ -1270,7 +1270,7 @@ function fetchTO(url, body, consume){
      r.json() pending forever, which wedged pool workers (and before
      them whole batches) with no error and no retry. */
   var ctl = window.AbortController ? new AbortController() : null;
-  var timer = ctl ? setTimeout(function(){ ctl.abort(); }, 12000) : null;
+  var timer = ctl ? setTimeout(function(){ ctl.abort(); }, 8000) : null;
   var p = fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:body, signal: ctl ? ctl.signal : undefined})
     .then(function(r){ return consume(r); });
   if(timer){ p = p.then(function(v){ clearTimeout(timer); return v; }, function(e){ clearTimeout(timer); throw e; }); }
@@ -2705,8 +2705,8 @@ function loadRoomEpochs(id, renderAfter){
   var cursor = 0;
   var sinceRender = 0;
   function fetchEpoch(ep){
-    var seq = [0, 1, 0];
-    var delays = [500, 1200];
+    var seq = [0, 1, 0, 1];
+    var delays = [300, 800, 1500];
     function call(att){
       return room.contract !== CONTRACT ? rpcOnceC(room.contract, "get_epoch", {room_id: room.cid, epoch: ep}, att)
                                         : rpcOnce("get_epoch", {room_id: id, epoch: ep}, att);
@@ -2758,6 +2758,19 @@ function loadRoomEpochs(id, renderAfter){
     st.loading = false;
     if(renderAfter) renderAll();
     snapSave();
+    /* A bad mirror stretch can fail records that exist on chain; the
+       boards then sit on partial or empty data until someone navigates.
+       While this room stays selected, retry the missing records on a
+       short backoff so the page heals itself. */
+    var missing = Object.keys(st.failed).length;
+    if(!missing){ st.retries = 0; return; }
+    if(id !== state.selected) return;
+    st.retries = (st.retries || 0) + 1;
+    if(st.retries > 4) return;
+    var wait = Math.min(4000 * Math.pow(2, st.retries - 1), 30000);
+    setTimeout(function(){
+      if(state.selected === id && !st.loading && Object.keys(st.failed).length) loadRoomEpochs(id, true);
+    }, wait);
   });
 }
 function scanReports(){
@@ -3011,6 +3024,13 @@ function listRoomsPaged(fetchPage){
   return step(0);
 }
 function refresh(){
+  /* Refresh cycles must not pile up: when the mirrors are slow a cycle
+     can outlast the 18 s interval, and overlapping cycles multiply the
+     RPC load that caused the slowness. A cycle older than 90 s is
+     treated as wedged and no longer blocks a fresh one. */
+  if(state.refreshing && Date.now() - (state.refreshStartedAt || 0) < 90000) return Promise.resolve();
+  state.refreshing = true;
+  state.refreshStartedAt = Date.now();
   var cfgJobs = [
     rpc("get_config", {}).then(function(c){ if(c) state.cfg1 = c; }).catch(function(){}),
     rpcRetryC(S6, "get_config", {}, 3).then(function(c){ if(c) state.cfg6 = c; }).catch(function(){}),
@@ -3085,9 +3105,11 @@ function refresh(){
         state.selected = state.rooms[0].id;
       loadAgentsAndProfiles(selectedRoom());
       loadGlobalBoard();
-      return scanReports().then(function(){ return loadRoomEpochs(state.selected, true); });
+      scanReports();
+      return loadRoomEpochs(state.selected, true);
     });
   }).then(function(){
+    state.refreshing = false;
     state.lastOk = new Date();
     paintSnapNote();
     renderAll();
@@ -3096,6 +3118,7 @@ function refresh(){
     loadAgentsAndProfiles(selectedRoom());
     loadGlobalBoard();
   }).catch(function(err){
+    state.refreshing = false;
     paintLiveStatus(true);
   });
 }
