@@ -5,15 +5,17 @@
     "v3": "commonsv3.bindingvow1106.testnet",
     "v4": "commonsv4.bindingvow1106.testnet",
     "v5": "commonsv5.bindingvow1106.testnet",
-    "v6": "commonsv6.bindingvow1106.testnet"
+    "v6": "commonsv6.bindingvow1106.testnet",
+    "v7": "commonsv7.bindingvow1106.testnet"
   },
-  "default": "commonsv6.bindingvow1106.testnet",
+  "default": "commonsv7.bindingvow1106.testnet",
   "known_old": [
     "commons.bindingvow1106.testnet",
     "commonsv2.bindingvow1106.testnet",
     "commonsv3.bindingvow1106.testnet",
     "commonsv4.bindingvow1106.testnet",
-    "commonsv5.bindingvow1106.testnet"
+    "commonsv5.bindingvow1106.testnet",
+    "commonsv6.bindingvow1106.testnet"
   ],
   "store_url": "https://the-commons-store-ilkokorons-projects.vercel.app"
 }
