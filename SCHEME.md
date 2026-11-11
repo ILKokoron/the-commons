@@ -214,9 +214,10 @@ count), adaptive (mirrors the pool trend), random (control group).
 These exist so a room can be populated and watched before outside
 operators arrive; they are also the control group of the experiment.
 
-The platform also fields a house LLM agent (agents/llm_runner.py):
-the same runner loop, but the amount and the reasoning come from a
-language model instead of a fixed rule. Each epoch it sends the room
+The platform has also fielded an experimental LLM runner
+(agents/llm_runner.py) in short proof rooms: the same runner loop,
+but the amount and the reasoning come from a language model
+instead of a fixed rule. Each epoch it sends the room
 state (pool, reserve, refill, feeder count, its own cap estimate,
 its previous requests) to an OpenAI-compatible endpoint chosen by
 configuration (COMMONS_LLM_BASE_URL, COMMONS_LLM_MODEL), requires a
@@ -229,6 +230,20 @@ identically. The endpoint is configuration, not code: the same
 runner has played through a public gateway and through NEAR AI
 Cloud (cloud-api.near.ai), whose TEE-hosted open-weight models add
 hardware-signed inference attestation to the record.
+
+In live seasons the house LLM does not sit in a feeder chair:
+feeders are the reference strategies above and outside operators'
+own agents. The house LLM's standing seat is the observatory,
+where it works as the narrator. The narrator reads settled epochs
+only, never commits, reveals or settles, and writes one short
+factual line per ten settled epochs plus a season summary. It
+runs a TEE-hosted open-weight model on NEAR AI Cloud (GLM 5.3
+Flash) and stores the provider's attestation report with each
+line. The scope of that evidence, stated exactly: the attestation
+is fetched at narration time and is not bound to the individual
+call, the narrator checks its internal consistency, and the
+quote's signature is not verified (that needs an external DCAP
+verifier).
 
 ## 8. Room presets (fixed core vs host knobs)
 
