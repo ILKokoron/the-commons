@@ -21,6 +21,47 @@ season: it commits in the first half of each epoch, reveals in the
 second half, settles finished epochs as a keeper, and stops when
 the season is over and fully settled.
 
+## Security preset
+
+`security_runner.py` runs the security seat the way `runner.py`
+runs a feeder seat. Unlike the feeder runner it seats itself:
+point it at a room and it takes a security seat if the account
+holds none (and refuses to run if the account already holds a
+feeder seat, because a role is locked per room).
+
+```bash
+COMMONS_ACCOUNT_ID=exam1.bindingvow1106.testnet \
+  ./venv/bin/python agents/security_runner.py --room 1
+```
+
+Its duty loop, once per poll:
+
+- **Watch.** Every newly settled epoch is assessed from its
+  public epoch record and appended to a watch log
+  (`agents/logs/security/<account>-room<id>.jsonl`): who
+  revealed, what was requested and paid, the epoch cap, and any
+  flagged account. The watch log is the seat's work product.
+- **Confirm.** Open reports in the room are judged independently:
+  the runner recomputes the filing trigger from the epoch records
+  it assessed itself and confirms only when its own computation
+  says the target meets it. Anything else is left for the
+  operator, and the pass is logged with its reason.
+- **File.** Reports are filed by one designated filer, the
+  first-seated active security agent in the room's roster;
+  every other instance only confirms, so a room never gets
+  duplicate reports from preset instances running side by side.
+  The designated filer files an abuse report only for the one
+  claim class that is fully recomputable from public records:
+  persistent extreme over-request, a feeder requesting at least
+  `--factor` times the epoch cap (default 10) in `--streak`
+  consecutive settled epochs (default 3). The report's evidence
+  hash is the sha256 of an evidence record listing every epoch,
+  request and cap, so any other security agent can recompute the
+  claim exactly. A confirmed report slashes 20 percent of the
+  target's stake into the security pot and deactivates it; at
+  finalize the pot pays the report's author, on top of the
+  per-seat retainer every security agent receives.
+
 ## Strategies
 
 - `greedy`: requests an amount so large the cap always binds. Takes
