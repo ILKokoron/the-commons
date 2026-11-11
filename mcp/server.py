@@ -7,7 +7,7 @@ agents withdraw from a shared pool under commit-reveal epochs.
 
 Configuration comes from the environment:
   COMMONS_ACCOUNT_ID   the NEAR account this server signs as
-                       (operator or sponsor). Required for write tools.
+                       (operator or host). Required for write tools.
   COMMONS_CONTRACT     contract account. The default comes from
                        the shared registry in contracts.json and is
                        the current contract,
@@ -185,14 +185,14 @@ server = MCPServer(
     instructions=(
         "Operate in The Commons, a NEAR testnet commons experiment. "
         "Start with commons_status to see who you are and what rooms "
-        "exist. Sponsors create rooms with commons_create_room. "
+        "exist. Hosts create rooms with commons_create_room. "
         "Operators register in a room (commons_register_agent for a "
         "feeder seat, commons_register_security for a security seat), "
         "then each epoch: commons_commit during the commit phase and "
         "commons_reveal during the reveal phase. On v2 and later "
         "contracts a new room sits in a recruiting state until it "
         "starts, which needs at least 3 registered security agents "
-        "(the sponsor starts it on v2 and v3, any account on v4, and "
+        "(the host starts it on v2 and v3, any account on v4, and "
         "on v5 at least 2 feeders must also be seated, after which "
         "the registration that completes the quorum starts the room "
         "automatically), and accounts can carry a display profile "
@@ -767,7 +767,7 @@ def commons_create_room(
     decay_bps: int = 9800,
     refill_floor: str = "0",
 ) -> dict:
-    """Sponsor action: open a new room (season). Amounts (stake, seed,
+    """Host action: open a new room (season). Amounts (stake, seed,
     refill_per_epoch) are NEAR decimal strings like "0.005" or integer
     yocto strings. Attaches exactly room_fee + seed, read from the
     contract config. Returns the new room id and a read-back of it.
@@ -869,7 +869,7 @@ def commons_create_room(
             f"requested window was {data_exclusivity_days} days")
     # The room id comes from the create transaction's own return
     # value (B6). The old rooms_created-minus-one derivation raced
-    # with any other sponsor creating a room in between and could
+    # with any other host creating a room in between and could
     # attach the read-back to a stranger's room; it survives only
     # as a fallback for contracts that return nothing.
     rv = res.get("return_value")
@@ -894,7 +894,7 @@ def commons_create_room(
         if not room or room["sponsor"] != ACCOUNT:
             res["ok"] = False
             res["verified"] = False
-            res["error"] = "read-back mismatch: new room not found under sponsor"
+            res["error"] = "read-back mismatch: new room not found under host"
         else:
             res["verified"] = True
     except Exception as e:
@@ -910,7 +910,7 @@ def commons_start_room(room_id: int) -> dict:
     """Start a room that is still in its recruiting state. Anchors
     epoch 0 at the moment of the call; before this, registration is
     open but commit, reveal and settle are rejected by the contract.
-    Who may call it depends on the contract: v2 and v3 are sponsor
+    Who may call it depends on the contract: v2 and v3 are host
     only and need at least 3 registered security agents, so abuse
     reports can actually reach their confirm threshold. v4 makes the
     call permissionless (any account) under the same security gate.
@@ -981,7 +981,7 @@ def _maybe_auto_start(res, room_id):
     the agent whose registration completes it fires the call, so
     from the players' side the room starts on its own. Only
     attempted where start_room is permissionless (v4, v5) or by the
-    room's own sponsor (v2 and later); v1 starts rooms at creation,
+    room's own host (v2 and later); v1 starts rooms at creation,
     so this is a no-op there. The outcome lands on the register
     result as room_state / auto_start and never fails the
     registration itself."""
@@ -1402,7 +1402,7 @@ def commons_confirm_report(report_id: int) -> dict:
 def commons_finalize_room(room_id: int) -> dict:
     """After season end: finalize the room. Splits the security pot
     among qualifying security agents (or folds it into the pool) and
-    marks the room ended, which unlocks the sponsor residue."""
+    marks the room ended, which unlocks the host residue."""
     res = near_call("finalize_room", {"room_id": room_id})
     if not res["ok"]:
         return res
@@ -1424,7 +1424,7 @@ def commons_finalize_room(room_id: int) -> dict:
 
 @server.tool()
 def commons_withdraw_residue(room_id: int) -> dict:
-    """Sponsor only, after finalize: take back whatever pool and
+    """Host only, after finalize: take back whatever pool and
     reserve remain in the room."""
     res = near_call("withdraw_residue", {"room_id": room_id})
     if not res["ok"]:
