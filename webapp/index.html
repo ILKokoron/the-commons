@@ -1244,7 +1244,7 @@ import { setupSender } from "https://cdn.jsdelivr.net/npm/@near-wallet-selector/
 import { setupMeteorWallet } from "https://cdn.jsdelivr.net/npm/@near-wallet-selector/meteor-wallet@8.9.3/+esm";
 import { setupNightly } from "https://cdn.jsdelivr.net/npm/@near-wallet-selector/nightly@8.9.3/+esm";
 "use strict";
-var RPCS = ["https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org", "https://archival-rpc.testnet.near.org"];
+var RPCS = ["https://rpc.testnet.fastnear.com", "https://archival-rpc.testnet.near.org", "https://rpc.testnet.near.org"];
 var CONTRACT = "commons.bindingvow1106.testnet";
 var V2 = "commonsv2.bindingvow1106.testnet";
 var S3 = "commonsv3.bindingvow1106.testnet";
@@ -1298,11 +1298,11 @@ function rpcRetry(fn, args, attempts){
   function go(n){
     return rpcOnce(fn, args, n).catch(function(e){
       if(n >= attempts) throw e;
-      var d = delays[Math.min(n - 1, delays.length - 1)];
+      var d = delays[Math.min(Math.max(n - 1, 0), delays.length - 1)];
       return new Promise(function(res){ setTimeout(res, d); }).then(function(){ return go(n + 1); });
     });
   }
-  return go(1);
+  return go(0);
 }
 function rpcSoft(fn, args){
   return rpcOnce(fn, args, 0).catch(function(){ return null; });
@@ -1723,11 +1723,11 @@ function rpcRetryC(contract, fn, args, attempts){
   function go2(n){
     return rpcOnceC(contract, fn, args, n).catch(function(e){
       if(n >= attempts) throw e;
-      var d = delays[Math.min(n - 1, delays.length - 1)];
+      var d = delays[Math.min(Math.max(n - 1, 0), delays.length - 1)];
       return new Promise(function(res){ setTimeout(res, d); }).then(function(){ return go2(n + 1); });
     });
   }
-  return go2(1);
+  return go2(0);
 }
 function rpcSoftC(contract, fn, args){
   return rpcOnceC(contract, fn, args, 0).catch(function(){ return null; });
@@ -2068,6 +2068,15 @@ function renderRoomDetail(){
 }
 function renderBoardsInto(r, assembled){
   var data = assembled.data;
+  var hb0 = $("rd-board-h"), rb0 = $("rd-board-r");
+  var settledN = Number(r.next_epoch_to_settle || 0);
+  var loadedN = (state.epochsByRoom[r.id] || []).length;
+  var stE = state.epochState[r.id];
+  if(settledN > 0 && loadedN < settledN && ((stE && stE.loading) || !failedEpochList(r).length)){
+    if(hb0) hb0.innerHTML = '<tr><td>Loading epoch records</td><td></td><td></td><td></td></tr>';
+    if(rb0) rb0.innerHTML = '<tr><td>Loading epoch records</td><td></td><td></td><td></td></tr>';
+    return;
+  }
   var accts = Object.keys(data.accounts);
   var hb = $("rd-board-h"), rb = $("rd-board-r");
   if(!accts.length){
