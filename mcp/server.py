@@ -148,6 +148,23 @@ if NEAR_CLI is None:
           "unset, near not on PATH, built-in default path absent); "
           "read tools work, but write tools will fail until "
           "COMMONS_NEAR_CLI points at the binary", file=sys.stderr)
+elif NEAR_CLI_ENV and not os.path.isfile(NEAR_CLI):
+    print(f"warning: COMMONS_NEAR_CLI points at {NEAR_CLI}, which "
+          "does not exist; write tools will fail until it points "
+          "at a real near-cli-rs binary", file=sys.stderr)
+else:
+    try:
+        _vp = subprocess.run([NEAR_CLI, "--version"],
+                             capture_output=True, text=True, timeout=10)
+        _vout = ((_vp.stdout or "") + (_vp.stderr or "")).strip()
+        if "near-cli-rs" not in _vout:
+            print(f"warning: the resolved near CLI at {NEAR_CLI} "
+                  f"reports {_vout[:60]!r}, not near-cli-rs; write "
+                  "tools use near-cli-rs-only syntax and will fail "
+                  "until COMMONS_NEAR_CLI points at a near-cli-rs "
+                  "binary", file=sys.stderr)
+    except Exception:
+        pass
 # The platform record store is the default commit path (issue 6):
 # its URL is a platform constant from the registry, so a commit
 # publishes whenever a write token is configured, with no per-
@@ -202,7 +219,8 @@ server = MCPServer(
         "the registration that completes the quorum starts the room "
         "automatically), and accounts can carry a display profile "
         "(commons_set_profile, commons_get_profile). Amounts are NEAR "
-        "decimal strings like \"0.005\" or integer yocto strings."
+        "decimal strings like \"0.005\" or \"12\" (whole numbers "
+        "are NEAR too); raw yocto only via the \"_yocto\" suffix."
     ),
 )
 
@@ -609,14 +627,23 @@ def _find_pending(state, room_id, epoch):
     """Pending entries are keyed by commitment hash (one store per
     commit, B2); the entry for a room and epoch is found by scanning
     the values. Entries written by older versions carry the same
-    fields, so they are found too. Returns (key, entry) or
+    fields, so they are found too. When several live entries exist
+    for one room and epoch (an outcome-unknown commit followed by a
+    recovery commit), the NEWEST one wins: a recovery commit that
+    landed proves the earlier one never did, because the contract
+    rejects duplicate commits, and a recovery commit that was
+    itself rejected is removed by the commit flow, leaving the
+    original. Entries marked superseded (a later commit for the
+    same epoch landed) are skipped. Returns (key, entry) or
     (None, None)."""
+    found = (None, None)
     for key, entry in state.items():
         if isinstance(entry, dict) \
                 and entry.get("room_id") == room_id \
-                and entry.get("epoch") == epoch:
-            return key, entry
-    return None, None
+                and entry.get("epoch") == epoch \
+                and not entry.get("superseded"):
+            found = (key, entry)
+    return found
 
 
 # ---------------------------------------------------------------- tools: read
@@ -1242,6 +1269,18 @@ def commons_commit(
         "amount_yocto": str(amount_y), "amount_near": near_str(amount_y),
         "salt": salt,
     })
+    if prev_entry is not None \
+            and prev_entry.get("commitment") != commitment:
+        # This commit landed, so the previous entry for the epoch
+        # can never land (the contract rejects duplicate commits);
+        # mark it superseded so the reveal flow never picks it.
+        with _PendingLock():
+            state = _load_pending()
+            old = state.get(prev_entry["commitment"])
+            if old is not None and not old.get("superseded"):
+                old["superseded"] = True
+                state[prev_entry["commitment"]] = old
+                _save_pending(state)
     return res
 
 
@@ -1268,7 +1307,8 @@ def commons_reveal(
     store. When a pending entry does exist, the explicit values must
     reproduce its commitment or the call refuses, rather than burning
     gas on a reveal the contract would reject. Amount is a NEAR
-    decimal string or integer yocto."""
+    amount ("0.005", "1.0" and "1" all mean NEAR); raw yocto only
+    via the "_yocto" suffix."""
     try:
         info = view("current_epoch", {"room_id": room_id})
     except Exception as e:
