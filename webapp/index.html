@@ -1263,10 +1263,16 @@ var state = { rooms: [], roomsLoaded: false, epochsByRoom: {}, currentByRoom: {}
 function b64(obj){
   return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
 }
-function fetchTO(url, body){
+function fetchTO(url, body, consume){
+  /* The abort timer must stay armed until the response BODY has been
+     consumed by the caller, not just until the headers arrive: a
+     mirror that drops the connection mid-body otherwise leaves
+     r.json() pending forever, which wedged pool workers (and before
+     them whole batches) with no error and no retry. */
   var ctl = window.AbortController ? new AbortController() : null;
   var timer = ctl ? setTimeout(function(){ ctl.abort(); }, 12000) : null;
-  var p = fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:body, signal: ctl ? ctl.signal : undefined});
+  var p = fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body:body, signal: ctl ? ctl.signal : undefined})
+    .then(function(r){ return consume(r); });
   if(timer){ p = p.then(function(v){ clearTimeout(timer); return v; }, function(e){ clearTimeout(timer); throw e; }); }
   return p;
 }
@@ -1275,8 +1281,7 @@ function rpcOnce(fn, args, attempt){
   var body = JSON.stringify({jsonrpc:"2.0", id:"1", method:"query", params:{
     request_type:"call_function", finality:"final",
     account_id:CONTRACT, method_name:fn, args_base64:b64(args)}});
-  return fetchTO(url, body)
-    .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+  return fetchTO(url, body, function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
     .then(function(d){
       if(d.error) throw new Error(d.error.message || "RPC error");
       var res = d.result;
@@ -1705,8 +1710,7 @@ function rpcOnceC(contract, fn, args, attempt){
   var body = JSON.stringify({jsonrpc:"2.0", id:"1", method:"query", params:{
     request_type:"call_function", finality:"final",
     account_id:contract, method_name:fn, args_base64:b64(args)}});
-  return fetchTO(url, body)
-    .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+  return fetchTO(url, body, function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
     .then(function(d){
       if(d.error) throw new Error(d.error.message || "RPC error");
       var res = d.result;
