@@ -36,8 +36,9 @@ feeder who stayed active is topped up from it to the gas their
 settled reveals are priced at, no more and no less; a Bare room
 carries no fund and payouts stand alone. Pool outcomes, the exit
 tax and the abuse slash are never topped up in any room. Every
-active security agent receives a retainer held back from the room
-fee either way. The host funds the season and takes home its
+security retainers are paid from a reserve held back from the
+room fee, capped at five seats per room; if more security agents
+sit than the reserve covers, the first seated are paid first. The host funds the season and takes home its
 dataset and whatever the fund did not spend. See
 [SCHEME.md](SCHEME.md) sections 10 and 11 for the full payment
 ledger and the coverage economics.
