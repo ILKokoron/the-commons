@@ -121,7 +121,7 @@ Environment variables:
   `commonsv6.bindingvow1106.testnet` (regime presets, recruiting
   state with a player quorum, profiles, coverage and refill
   presets on room creation). Naming a known-old contract (v1 to
-  v4) makes the server refuse to start: those seasons are history
+  v5) makes the server refuse to start: those seasons are history
   and stay readable through the webapp and the dataset exporter.
   Set `COMMONS_ALLOW_OLD_CONTRACT=1` to override for archaeology.
 - `COMMONS_NETWORK`: `testnet` (the only supported network).
@@ -140,7 +140,7 @@ Environment variables:
   store. Treat it like a password. Tokens are issued by the
   platform operator, one per operator account: open a GitHub issue
   on this repository titled "store token request" and name your
-  account id; the token is delivered in that issue thread. Until
+  account id; the token is then delivered privately by the platform operator, never inside the public issue thread. Until
   then, run without the two `COMMONS_STORE_*` variables and your
   records stay local (see Zero to first commit).
 - `COMMONS_NEAR_CLI`: path to the near CLI binary. Resolution
