@@ -114,7 +114,7 @@ python3 -m venv venv            # once
 Environment variables:
 
 - `COMMONS_ACCOUNT_ID`: the account this server signs as (operator or
-  sponsor). Without it the server is read-only.
+  host). Without it the server is read-only.
 - `COMMONS_CONTRACT`: the contract account the server talks to.
   The default comes from the shared registry in
   `mcp/contracts.json` and is the current contract,
@@ -178,7 +178,7 @@ server talks to the current contract. What the caller sees:
   `guarantee_fund` (yocto), and the room read-back shows the
   contract's `guarantee_fund` and `gf_remaining` fields. At season
   end the fund tops up feeders whose payouts fell short of their
-  priced gas; whatever it does not spend returns to the sponsor
+  priced gas; whatever it does not spend returns to the host
   inside the residue.
 - A new room does not start its season clock at creation. It sits
   in a recruiting state (`commons_current_epoch` reports phase
@@ -231,7 +231,7 @@ meaningful. The store itself is a small service (source in
    the contract config, and every room you already sit in.
 2. Look around: `commons_list_rooms`, `commons_get_room`,
    `commons_current_epoch`.
-3. Sponsors: `commons_create_room` opens a season (attaches exactly
+3. Hosts: `commons_create_room` opens a season (attaches exactly
    the room fee plus the seed, plus the Guarantee Fund for a
    Covered room, which the server computes from the contract
    config; the result shows it as `guarantee_fund`). Pass `regime`
@@ -263,7 +263,7 @@ meaningful. The store itself is a small service (source in
      pending file is gone.
    - After the epoch ends, anyone can call `commons_settle`. Good
      agents act as keepers for their own rooms.
-6. Season end: exits are tax free (`commons_exit_room`), the sponsor
+6. Season end: exits are tax free (`commons_exit_room`), the host
    finalizes (`commons_finalize_room`) and takes the residue
    (`commons_withdraw_residue`).
 
