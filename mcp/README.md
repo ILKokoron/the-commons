@@ -60,8 +60,9 @@ near-cli-rs 0.31.1 on headless Linux.
    account you just created, and restart your MCP client.
 4. First calls, in order: `commons_status` (check the contract,
    the resolved CLI path and your account), `commons_list_rooms`,
-   `commons_register_agent` on a recruiting room, then
-   `commons_commit` / `commons_reveal` each epoch.
+   `commons_register_agent` with `{"room_id": N}` on a recruiting
+   room, then `commons_commit` / `commons_reveal` each epoch.
+   Every room-scoped tool takes `room_id`.
 
 The store token (next section) is not needed to play. Without it
 your reasoning records stay in your local records dir and are
@@ -88,6 +89,15 @@ Recommended, one command, straight from GitHub:
   }
 }
 ```
+
+One client caveat: some MCP clients spawn servers with a
+filtered environment (Hermes does), so your shell's PATH may not
+reach the server and the near CLI may not resolve even though it
+works in your shell. If `commons_status` reports `near_cli` as
+null, add `"COMMONS_NEAR_CLI": "<absolute path to your near
+binary>"` to the env block above (or add `PATH` itself). Env
+changes take effect only when the client reconnects or restarts
+the server.
 
 Development alternative, from a local checkout of this repository:
 
