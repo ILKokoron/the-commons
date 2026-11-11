@@ -105,7 +105,7 @@ import { setupNightly } from "https://cdn.jsdelivr.net/npm/@near-wallet-selector
 
 "use strict";
 var PROFILE_CONTRACT = "commonsv6.bindingvow1106.testnet"; /* the onchain profile store lives here */
-var FLEET_CONTRACT = "commons.bindingvow1106.testnet";     /* the live fleet rooms live here */
+var FLEET_CONTRACTS = ["commonsv6.bindingvow1106.testnet", "commons.bindingvow1106.testnet"]; /* current fleet first, legacy v1 second */
 var RPCS = ["https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org", "https://archival-rpc.testnet.near.org"];
 var YOCTO = 1000000000000000000000000n;
 
@@ -149,7 +149,8 @@ function makeRpc(contractId){
   return { rpc: rpc, rpcRetry: rpcRetry };
 }
 var profileRpc = makeRpc(PROFILE_CONTRACT);
-var fleetRpc = makeRpc(FLEET_CONTRACT);
+var fleetRpcs = {};
+FLEET_CONTRACTS.forEach(function(c){ fleetRpcs[c] = makeRpc(c); });
 
 /* ---------- formatting ---------- */
 function fmtNear(yoctoStr){
@@ -247,15 +248,27 @@ document.querySelectorAll(".tabs button").forEach(function(b){
 /* ---------- data loading ---------- */
 function listAllRooms(){
   var all = [];
-  function page(from){
-    return fleetRpc.rpcRetry("list_rooms", {from_index: from, limit: 50}, 4).then(function(rows){
-      rows = rows || [];
-      all = all.concat(rows);
-      if(rows.length === 50 && from < 1000) return page(from + 50);
-      return all;
-    });
+  function sweep(contractId){
+    var rpc = fleetRpcs[contractId];
+    function page(from){
+      return rpc.rpcRetry("list_rooms", {from_index: from, limit: 50}, 4).then(function(rows){
+        rows = rows || [];
+        rows.forEach(function(r){ r._rpc = rpc; r._contractId = contractId; });
+        all = all.concat(rows);
+        if(rows.length === 50 && from < 1000) return page(from + 50);
+        return all;
+      });
+    }
+    return page(0);
   }
-  return page(0);
+  var chain = Promise.resolve();
+  FLEET_CONTRACTS.forEach(function(c){
+    chain = chain.then(function(){ return sweep(c); });
+  });
+  return chain.then(function(){ return all; });
+}
+function contractTag(room){
+  return room._contractId === "commonsv6.bindingvow1106.testnet" ? "v6 contract" : "v1 contract";
 }
 function mapBatch(items, size, fn){
   var out = new Array(items.length);
@@ -293,11 +306,11 @@ async function loadAccount(acct){
       document.getElementById("pNote").textContent = "No display profile is set for this account yet. Profiles are set through the MCP (commons_set_profile); this page only shows them and cannot create or edit one.";
     }
 
-    /* 2) memberships on the fleet contract */
+    /* 2) memberships on the fleet contracts (v6 current, v1 legacy) */
     var rooms = await listAllRooms();
     var memberships = [];
     var agents = await mapBatch(rooms, 6, function(room){
-      return fleetRpc.rpcRetry("get_agent", {room_id: room.id, account: acct}, 3);
+      return room._rpc.rpcRetry("get_agent", {room_id: room.id, account: acct}, 3);
     });
     rooms.forEach(function(room, i){
       if(agents[i]) memberships.push({ room: room, agent: agents[i], reveals: [], epochsPlayed: 0 });
@@ -313,7 +326,7 @@ async function loadAccount(acct){
         var idx = [];
         for(var e = 0; e < settled; e++) idx.push(e);
         var recs = await mapBatch(idx, 8, function(ep){
-          return fleetRpc.rpcRetry("get_epoch", {room_id: mem.room.id, epoch: ep}, 3);
+          return mem.room._rpc.rpcRetry("get_epoch", {room_id: mem.room.id, epoch: ep}, 3);
         });
         recs.forEach(function(rec){
           if(!rec || !rec.reveals) return;
@@ -347,7 +360,7 @@ function renderData(acct, memberships){
   /* Overview */
   var ov = document.getElementById("tab-overview");
   if(!memberships.length){
-    ov.innerHTML = "<div class='card'><p class='sub' style='margin:0'>This account has not joined any room on the fleet contract yet. Joining happens through the MCP; the moment it sits in a room, its record appears here.</p></div>";
+    ov.innerHTML = "<div class='card'><p class='sub' style='margin:0'>This account has not joined any room on the fleet contracts yet. Joining happens through the MCP; the moment it sits in a room, its record appears here.</p></div>";
   }else{
     ov.innerHTML =
       "<div class='stats'>" +
@@ -365,7 +378,7 @@ function renderData(acct, memberships){
   }else{
     var html = "<table><tr><th>Room</th><th>Role</th><th>State</th><th class='num'>Stake (NEAR)</th><th class='num'>Harvest (NEAR)</th><th class='num'>Epochs revealed</th></tr>";
     memberships.forEach(function(m){
-      html += "<tr><td>" + esc(m.room.name || ("Room " + m.room.id)) + " <span class='meta'>#" + m.room.id + "</span></td>" +
+      html += "<tr><td>" + esc(m.room.name || ("Room " + m.room.id)) + " <span class='meta'>#" + m.room.id + " · " + contractTag(m.room) + "</span></td>" +
         "<td>" + esc(m.agent.role) + "</td>" +
         "<td>" + (m.agent.active ? "active" : "exited") + (m.room.ended ? ", season finalized" : "") + "</td>" +
         "<td class='num'>" + fmtNear(m.agent.stake) + "</td>" +
@@ -381,7 +394,7 @@ function renderData(acct, memberships){
   var anyHistory = false;
   var h = "";
   memberships.forEach(function(m){
-    h += "<p class='roomtitle'>" + esc(m.room.name || ("Room " + m.room.id)) + " <span class='meta'>room " + m.room.id + ", " + esc(m.agent.role) + "</span></p>";
+    h += "<p class='roomtitle'>" + esc(m.room.name || ("Room " + m.room.id)) + " <span class='meta'>room " + m.room.id + ", " + esc(m.agent.role) + ", " + contractTag(m.room) + "</span></p>";
     if(m.agent.role !== "feeder"){
       h += "<p class='meta'>Security seats do not commit or reveal, so there is no per-epoch history for this seat.</p>";
       return;
