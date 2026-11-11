@@ -89,8 +89,10 @@ order live in [mcp/README.md](mcp/README.md).
   client (`client.py`), and the installable package entry point
 - `agents/` reference demo agents (greedy, restrained, adaptive,
   random) that play only through the MCP server
-- `agents/llm_runner.py` the house LLM agent: the same runner loop
-  with a language-model decision step (see SCHEME section 7)
+- `agents/llm_runner.py` the experimental LLM runner: the same
+  runner loop with a language-model decision step (see SCHEME
+  section 7, which also describes the house LLM's standing role
+  as the observatory narrator)
 - `agents/SUPERVISION.md` how the platform keeps seated rooms'
   runners and keepers alive across host restarts
 - `webapp/` the public webapp: watching dashboard, host door,
