@@ -2,7 +2,7 @@
 
 Current contract: `contract-v6/src/lib.rs` (near-sdk 5), deployed at
 commonsv6.bindingvow1106.testnet (owner bindingvow1106.testnet, room
-fee 0.01 NEAR); the webapp sponsor door and the MCP both target it.
+fee 0.01 NEAR); the webapp host door and the MCP both target it.
 Everything below describes the contract and its scheme as one
 system: room regimes, the start quorum, security retainers, feeder
 top-ups from a Guarantee Fund in Covered rooms, profiles, and the
@@ -10,8 +10,8 @@ payment ledger.
 
 ## 1. What this is
 
-One contract runs the whole hotel. Inside it, sponsors open rooms.
-Each room is one season of the experiment: a pool seeded by the sponsor
+One contract runs the whole hotel. Inside it, hosts open rooms.
+Each room is one season of the experiment: a pool seeded by the host
 that refills slowly from a reserve, a set of feeder agents who withdraw
 from it under a hard cap, and security agents who police abuse. The
 contract is deliberately boring: all spectacle belongs to the interface.
@@ -20,7 +20,7 @@ contract is deliberately boring: all spectacle belongs to the interface.
 
 - Owner (the hotel): deploys the contract, receives the flat room fee,
   edits nothing inside a room after creation.
-- Sponsor: pays the room fee and the seed, and, in a Covered room, the
+- Host: pays the room fee and the seed, and, in a Covered room, the
   Guarantee Fund; sets the room knobs, owns the room's data during the
   exclusivity window, and recovers the unspent residue after the season
   is finalized.
@@ -64,9 +64,9 @@ contract is deliberately boring: all spectacle belongs to the interface.
   at least one confirmed report. If nobody qualifies, the pot folds
   into the pool. Any retainer reserve left after paying active security
   agents transfers to the owner.
-- withdraw_residue (sponsor, after finalize) returns whatever pool,
-  refill reserve, and unspent Guarantee Fund remain to the sponsor.
-- Refill comes from the sponsor-funded reserve, not from live staking
+- withdraw_residue (host, after finalize) returns whatever pool,
+  refill reserve, and unspent Guarantee Fund remain to the host.
+- Refill comes from the host-funded reserve, not from live staking
   yield. The reserve model keeps the arithmetic identical and
   auditable.
 - Regime preset: create_room takes a regime, Wild or Paced, stored
@@ -78,7 +78,7 @@ contract is deliberately boring: all spectacle belongs to the interface.
   pro-rata over capped demands when capped demand exceeds the
   budget. On the final epoch the budget is the entire remaining
   snapshot, so under maximum greed the pool declines linearly and
-  reaches zero exactly at the final epoch; the sponsor's residue is
+  reaches zero exactly at the final epoch; the host's residue is
   only what finale demand does not take.
 - The room stake may be 0 (gas-only entry tiers). Registration then
   attaches 0 deposit, and exit and slash math run on zero stakes
@@ -96,13 +96,13 @@ are seated, so an empty or one-agent room stays in recruiting,
 visibly waiting for players, and the registration that completes the
 quorum can fire the start itself (the MCP attempts it automatically
 after registering). Registration stays open mid-season up to
-capacity. The sponsor's data exclusivity window is a platform-terms
+capacity. The host's data exclusivity window is a platform-terms
 setting kept with the record store; the contract does not store it.
 
-A sponsor can cancel a room that has not started (cancel_room,
-sponsor only): the room is marked cancelled and everything it still
-holds for the sponsor, the whole seed plus any Guarantee Fund,
-returns to the sponsor. The room's retainer reserve transfers to the
+A host can cancel a room that has not started (cancel_room,
+host only): the room is marked cancelled and everything it still
+holds for the host, the whole seed plus any Guarantee Fund,
+returns to the host. The room's retainer reserve transfers to the
 owner (no security ever served in a cancelled room). Agents who
 registered in a cancelled room exit with no tax.
 
@@ -189,7 +189,7 @@ the record is stored (a URL or content id). Anyone holding the record
 can prove it is the exact one committed to, which is what makes the
 dataset trustworthy rather than self-reported.
 
-Access tiers follow the design: the room's sponsor holds exclusivity
+Access tiers follow the design: the room's host holds exclusivity
 for the window set in the platform terms (kept with the record
 store, not on chain); operators in a room can read their own room's
 full trail; the public interface shows live state and aggregates,
@@ -230,14 +230,14 @@ runner has played through a public gateway and through NEAR AI
 Cloud (cloud-api.near.ai), whose TEE-hosted open-weight models add
 hardware-signed inference attestation to the record.
 
-## 8. Room presets (fixed core vs sponsor knobs)
+## 8. Room presets (fixed core vs host knobs)
 
 Fixed by the contract, identical in every room: stake as bond,
 commit-reveal epochs, one operator one agent, cap enforced at
 settlement, pro-rata shortfall rule, 10 percent exit tax, 20 percent
 abuse slash, the report threshold formula, and the log format above.
 
-Sponsor knobs at create_room: name, stake amount, feeder capacity,
+Host knobs at create_room: name, stake amount, feeder capacity,
 seed, refill_per_epoch, cap_bps, epoch_secs, season_epochs, plus the
 preset choices below (regime, refill mode, coverage). Tier presets (Practice $1 solo, Micro $10,
 Small $50, Medium $250, Large $1000) are knob bundles, not separate
@@ -245,10 +245,10 @@ code paths.
 
 The regime (Wild or Paced) is chosen at create_room, from the
 official presets only; the measurement layer (commit-reveal, caps,
-pro-rata, log format) is never a sponsor choice. Stake-zero rooms
+pro-rata, log format) is never a host choice. Stake-zero rooms
 make the Practice and Micro tiers gas-only.
 
-Refill mode is one more sponsor choice at create_room, from two
+Refill mode is one more host choice at create_room, from two
 official presets only: Flat or Decaying. It needs no token and
 changes no money flow, only the timing of the refill.
 
@@ -258,14 +258,14 @@ changes no money flow, only the timing of the refill.
   refill_n = max(refill_floor, refill_per_epoch x decay^n),
   where n is the epoch index, decay is a per-epoch multiplier
   below 1, and refill_floor is the smallest refill ever paid.
-  Both decay (decay_bps) and refill_floor are sponsor knobs at
+  Both decay (decay_bps) and refill_floor are host knobs at
   create_room, locked for the season. The standard preset values
   are decay 0.98 per epoch and a floor at 10 percent of
   refill_per_epoch, so the tap dries visibly but never fully
   closes.
 
 The refill stays reserve-based (section 3): the pool is topped
-up from the sponsor's reserve, never minted from nothing, so
+up from the host's reserve, never minted from nothing, so
 Decaying only stretches the reserve over the season, it never
 creates new money. Late epochs get a drier tap by design.
 
@@ -276,14 +276,14 @@ so a Flat room and a Decaying room stay comparable epoch by
 epoch.
 
 Pool asset. Rooms today run in NEAR. The pool asset dimension is
-designed as one more sponsor choice at create_room, from an
+designed as one more host choice at create_room, from an
 official whitelist only, locked for the whole season: the room
 stores its asset, and every money flow of that room (seed, stake
 bond, payouts, exit tax, slash, residue) is denominated in it. The
 scheme's arithmetic is percentage-based throughout (cap_bps,
 pro-rata shares, exit tax, slash), so it is unit-agnostic and runs
 unchanged on any asset. The multi-asset build is demand-led: it is
-undertaken when a sponsor asks for a non-NEAR room, not
+undertaken when a host asks for a non-NEAR room, not
 speculatively.
 
 On mainnet the whitelist is: NEAR (native), USDC, USDT, wBTC and
@@ -295,7 +295,7 @@ test tokens), which is why NEAR is the only live asset today.
 Two rules keep the design honest. First, a token room is a
 two-currency room: gas and the coverage machinery of section 11
 (Guarantee Fund top-ups, security retainers) are NEAR by nature,
-because gas is paid in NEAR. A token room's sponsor therefore funds
+because gas is paid in NEAR. A token room's host therefore funds
 the seed in the room's asset plus the Guarantee Fund in NEAR, and
 every agent still needs a small NEAR balance of its own for gas and
 token storage registration. Second, harvest is never compared
@@ -303,22 +303,22 @@ across assets in raw units; cross-asset comparison uses each
 agent's share of its room's total payouts, in percent.
 
 The whitelist is closed: the five assets above are the whole
-list, and a sponsor-issued token is never a room asset. A sponsor
+list, and a host-issued token is never a room asset. A host
 that runs a room denominated in its own token reads as the
-sponsor playing inside its own arena, and the room stops being an
+host playing inside its own arena, and the room stops being an
 experiment and becomes token distribution. The platform never
-issues a house token either; the venue owner and the sponsors
+issues a house token either; the venue owner and the hosts
 stay out of the asset itself, so every room's skin in the game is
 an asset none of them controls.
 
-Coverage is the sponsor's choice at create_room, one knob among
+Coverage is the host's choice at create_room, one knob among
 the presets, recorded as a room parameter so data stays comparable
 across rooms:
 
 - Bare: no Guarantee Fund, no top-ups. Losses are real and the
   tragedy is uncushioned; this is the pure form of the
   experiment.
-- Covered: the sponsor escrows a Guarantee Fund, and at finalize
+- Covered: the host escrows a Guarantee Fund, and at finalize
   each finisher is topped up to cover the gas of the epochs they
   revealed, and no more: the target is epochs_revealed x
   gas_per_epoch minus payouts, floored at zero, with GF =
@@ -356,7 +356,7 @@ connect, no login.
 
 Access doors:
 
-- Sponsors act one-shot, and a human sponsor gets two doors: the
+- Hosts act one-shot, and a human host gets two doors: the
   MCP server (commons_create_room, commons_start_room,
   commons_finalize_room, commons_withdraw_residue), or a wallet
   connect panel in the webapp covering the same one-shot actions
@@ -412,7 +412,7 @@ Setup, once per contract:
 
 Per room:
 
-- create_room. Payer: the sponsor, deposit exactly room_fee + seed
+- create_room. Payer: the host, deposit exactly room_fee + seed
   plus the Guarantee Fund in a Covered room, plus gas. Process, in
   order: the contract checks the deposit matches that sum exactly,
   with the Guarantee Fund computed as capacity x season_epochs x
@@ -431,13 +431,13 @@ Per room:
   it; it leaves only via exit, slash, or season end (below).
 - start_room. Payer: the caller, gas only, no deposit (in practice
   the agent whose registration completed the quorum, or the
-  sponsor). Process: the contract checks the room is still
+  host). Process: the contract checks the room is still
   recruiting and the quorum is seated (at least 3 security agents
   and at least 2 feeder agents), and anchors the season clock at
   that moment.
-- cancel_room. Payer: the sponsor, gas only. Process: only before
+- cancel_room. Payer: the host, gas only. Process: only before
   the room starts; the room is marked cancelled and the whole seed
-  plus any Guarantee Fund transfers back to the sponsor, and the
+  plus any Guarantee Fund transfers back to the host, and the
   retainer reserve transfers to the owner. Registered agents exit
   afterwards with no tax.
 
@@ -464,12 +464,12 @@ Per epoch:
   order, independently of any player's runner. Process, in
   order: this epoch's scheduled refill moves from the room's
   reserve into its pool, capped by the reserve (an internal ledger
-  move of sponsor money, no transfer leaves the contract); the
+  move of host money, no transfer leaves the contract); the
   snapshot and per-agent cap are computed (Paced also computes the
   epoch budget); every reveal is paid min(requested, cap),
   pro-rata over capped demand if the total exceeds what the pool
   can pay; those payouts are real transfers from the contract to
-  each feeder, funded by the sponsor's seed; the settled epoch
+  each feeder, funded by the host's seed; the settled epoch
   record (all reveals, amounts, pool after) is written
   permanently, and its storage is charged to the contract account.
 
@@ -523,10 +523,10 @@ Exit, abuse, and closing:
   still-active security agents who authored at least one confirmed
   report, paid as real transfers from the contract; if nobody
   qualifies, the pot folds into the pool instead.
-- withdraw_residue. Payer: the sponsor, gas only. Process: after
+- withdraw_residue. Payer: the host, gas only. Process: after
   finalize, the remaining pool plus reserve plus unspent Guarantee
-  Fund transfers back to the sponsor. This is the sponsor
-  recovering the unspent part of its seed and escrow; the sponsor's
+  Fund transfers back to the host. This is the host
+  recovering the unspent part of its seed and escrow; the host's
   true net cost for the room is room_fee + (seed + Guarantee Fund
   - residue), which equals the fee plus everything the feeders
   were paid in payouts and top-ups.
@@ -550,7 +550,7 @@ Net position per role, with these flows (the honest summary):
   it exists and the agent authored a confirmed report; costs are
   registration gas and any report or confirm gas. The retainer is
   the floor; the pot is upside.
-- Sponsor: always net negative in NEAR by design (fee plus
+- Host: always net negative in NEAR by design (fee plus
   whatever of the seed and Guarantee Fund was actually paid out);
   what it buys is the season and its dataset during the
   exclusivity window.
@@ -576,9 +576,9 @@ plus reveal cost of one played epoch), retainer_per_security =
   create_room requires exactly room_fee + seed + GF, where GF =
   capacity x season_epochs x gas_per_epoch x 3 / 2, computed in
   exact integer math. The room stores guarantee_fund and
-  gf_remaining; get_room exposes both. The fund is the sponsor's
+  gf_remaining; get_room exposes both. The fund is the host's
   money held for one purpose: feeder top-ups at finalize. The
-  sponsor's maximum exposure is known at create and never grows.
+  host's maximum exposure is known at create and never grows.
   In a Bare room no fund is escrowed and no top-up exists.
 - Retainer reserve split of the fee. At create, retainer_reserve =
   min(room_fee, retainer_per_security x 5) is held on the room and
@@ -599,7 +599,7 @@ plus reveal cost of one played epoch), retainer_per_security =
   authors, or the pot folds into the pool. (d) Unspent GF stays in
   gf_remaining and is part of residue.
 - Residue includes unspent GF. withdraw_residue returns pool +
-  refill reserve + gf_remaining to the sponsor and zeroes all
+  refill reserve + gf_remaining to the host and zeroes all
   three.
 - Who this protects and who it does not. A feeder in a Covered
   room who stays active to season end finishes with payouts plus
@@ -607,6 +607,6 @@ plus reveal cost of one played epoch), retainer_per_security =
   agent who stays active receives the retainer even in a clean
   season. Early exit voids the top-up and the retainer and the 10
   percent exit tax applies; a confirmed slash voids them too. The
-  sponsor is NEAR-negative by design: he is the buyer of the
+  host is NEAR-negative by design: he is the buyer of the
   season and its dataset, and no licensing or revenue-share
   mechanism exists anywhere in the system.
