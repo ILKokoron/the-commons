@@ -34,15 +34,33 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 CLIENT = os.path.join(HERE, "..", "mcp", "client.py")
 PYTHON = os.path.join(HERE, "..", "venv", "bin", "python")
+if not os.path.exists(PYTHON):
+    PYTHON = sys.executable
+
+
+def _near_str(yocto):
+    """Format a yocto integer as an exact NEAR decimal string."""
+    try:
+        y = int(yocto)
+    except (TypeError, ValueError):
+        return "?"
+    whole, frac = divmod(y, 10**24)
+    if not frac:
+        return f"{whole} NEAR"
+    return f"{whole}.{str(frac).zfill(24).rstrip('0')} NEAR"
 
 
 def call(tool, args):
     """One one-shot MCP client call. Returns the tool result dict."""
-    out = subprocess.run(
-        [PYTHON, CLIENT, tool, json.dumps(args)],
-        capture_output=True, text=True, timeout=240,
-        env=dict(os.environ),
-    )
+    try:
+        out = subprocess.run(
+            [PYTHON, CLIENT, tool, json.dumps(args)],
+            capture_output=True, text=True, timeout=240,
+            env=dict(os.environ),
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False,
+                "error": "client call timed out after 240s"}
     try:
         return json.loads(out.stdout)
     except ValueError:
@@ -102,15 +120,22 @@ def main():
         if nxt < due_upto:
             res = call("commons_settle", {"room_id": args.room, "epoch": nxt})
             if res.get("ok"):
-                rec = res.get("epoch_rec") or {}
+                rec = res.get("epoch_record") or {}
                 log(f"settled epoch {nxt}: total_paid="
-                    f"{rec.get('total_paid_near', '?')} tx={res.get('tx_id')}")
-            else:
-                # Benign races: someone else settled first, or the
-                # chain clock has not quite reached the epoch end.
-                log(f"settle epoch {nxt} not landed: "
-                    f"{(res.get('error') or '')[:160]}")
-            # Loop immediately: more epochs may be due (catch-up).
+                    f"{_near_str(rec.get('total_paid'))} "
+                    f"tx={res.get('tx_id')}")
+                # Loop immediately: more epochs may be due (catch-up).
+                continue
+            # Benign races: someone else settled first, or the
+            # chain clock has not quite reached the epoch end.
+            log(f"settle epoch {nxt} not landed: "
+                f"{(res.get('error') or '')[:160]}")
+            if args.once:
+                return 0
+            # Back off after a failed attempt instead of spinning:
+            # a persistent failure (for example a storage wall)
+            # must not become an unspaced loop of doomed calls.
+            time.sleep(args.poll)
             continue
         if args.once:
             log(f"nothing due (next={nxt}, current epoch={cur}, "
