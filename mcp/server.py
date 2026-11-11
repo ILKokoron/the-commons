@@ -308,28 +308,6 @@ def view(fn, args):
     return json.loads(raw) if raw else None
 
 
-def view_strict(fn, args):
-    """Like view(), but a contract-side failure (the RPC result
-    carrying an "error" instead of return bytes) raises with the
-    contract's own text. Used by the v2-only profile reads, where a
-    missing method on a v1 contract must surface as an honest
-    MethodNotFound error rather than looking like an empty result."""
-    result = _rpc(
-        "query",
-        {
-            "request_type": "call_function",
-            "finality": "final",
-            "account_id": CONTRACT,
-            "method_name": fn,
-            "args_base64": base64.b64encode(json.dumps(args).encode()).decode(),
-        },
-    )
-    if isinstance(result, dict) and result.get("error"):
-        raise RuntimeError(str(result["error"]))
-    raw = bytes(result["result"])
-    return json.loads(raw) if raw else None
-
-
 def account_view(account):
     return _rpc(
         "query",
@@ -446,6 +424,12 @@ def _tx_outcome(tx_hash, signer):
     return {"executed": True, "failure": None, "return_value": success_value}
 
 
+# finalize_room settles every remaining epoch inside one call, so
+# its gas need grows with the unsettled backlog; the flat 30 TGas
+# that suits the single-step calls can starve it on a large room.
+GAS_BY_METHOD = {"finalize_room": "300 TeraGas"}
+
+
 def near_call(fn, args, deposit_yocto=0):
     """Run one signed contract call as COMMONS_ACCOUNT_ID and verify it."""
     if not ACCOUNT:
@@ -465,7 +449,8 @@ def near_call(fn, args, deposit_yocto=0):
     deposit = f"{near_str(deposit_yocto)} NEAR"
     cmd = [
         NEAR_CLI, "contract", "call-function", "as-transaction", CONTRACT, fn,
-        "json-args", json.dumps(args), "prepaid-gas", "30 TeraGas",
+        "json-args", json.dumps(args), "prepaid-gas",
+        GAS_BY_METHOD.get(fn, "30 TeraGas"),
         "attached-deposit", deposit, "sign-as", ACCOUNT,
         "network-config", NETWORK, "sign-with-keychain", "send",
     ]
@@ -787,7 +772,7 @@ def commons_get_profile(account_id: str = "") -> dict:
         return err("no account_id given and COMMONS_ACCOUNT_ID is not "
                    "configured; pass account_id explicitly")
     try:
-        profile = view_strict("get_profile", {"account": acct})
+        profile = view("get_profile", {"account": acct})
         return {"ok": True, "account": acct, "profile": profile}
     except Exception as e:
         return err(f"get_profile failed: {e}")
@@ -1425,7 +1410,14 @@ def commons_exit_room(room_id: int) -> dict:
             "get_agent", {"room_id": room_id, "account": ACCOUNT})
         room = view("get_room", {"room_id": room_id})
         res["room_after"] = room
-        res["verified"] = True
+        agent = res["agent_after"]
+        if not agent or agent.get("active"):
+            res["ok"] = False
+            res["verified"] = False
+            res["error"] = ("read-back mismatch: agent still active "
+                            "after exit")
+        else:
+            res["verified"] = True
     except Exception as e:
         res["ok"] = False
         res["verified"] = False
@@ -1458,12 +1450,27 @@ def commons_confirm_report(report_id: int) -> dict:
     """Security only: confirm an abuse report. A report confirms when
     confirmations reach a majority of the room's security set; the
     reporter and the target cannot confirm."""
+    try:
+        before = view("get_report", {"report_id": report_id})
+    except Exception as e:
+        return err(f"could not read report {report_id} before "
+                   f"confirming: {e}")
     res = near_call("confirm_report", {"report_id": report_id})
     if not res["ok"]:
         return res
     try:
-        res["report"] = view("get_report", {"report_id": report_id})
-        res["verified"] = True
+        after = view("get_report", {"report_id": report_id})
+        res["report"] = after
+        if not after or not before \
+                or int(after["confirms"]) != int(before["confirms"]) + 1:
+            res["ok"] = False
+            res["verified"] = False
+            res["error"] = (
+                "read-back mismatch: confirmation not recorded "
+                f"(confirms {before['confirms'] if before else '?'} "
+                f"before, {after['confirms'] if after else '?'} after)")
+        else:
+            res["verified"] = True
     except Exception as e:
         res["ok"] = False
         res["verified"] = False
@@ -1503,8 +1510,15 @@ def commons_withdraw_residue(room_id: int) -> dict:
     if not res["ok"]:
         return res
     try:
-        res["room_after"] = view("get_room", {"room_id": room_id})
-        res["verified"] = True
+        room = view("get_room", {"room_id": room_id})
+        res["room_after"] = room
+        if not room or not room.get("residue_withdrawn"):
+            res["ok"] = False
+            res["verified"] = False
+            res["error"] = ("read-back mismatch: residue_withdrawn "
+                            "is not set after withdraw_residue")
+        else:
+            res["verified"] = True
     except Exception as e:
         res["ok"] = False
         res["verified"] = False
@@ -1528,7 +1542,7 @@ def commons_set_profile(display_name: str, bio: str, social: str) -> dict:
     if not res["ok"]:
         return res
     try:
-        profile = view_strict("get_profile", {"account": ACCOUNT})
+        profile = view("get_profile", {"account": ACCOUNT})
         res["profile"] = profile
         if (not profile
                 or profile.get("display_name") != display_name
