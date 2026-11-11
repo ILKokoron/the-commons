@@ -2687,43 +2687,70 @@ function loadRoomEpochs(id, renderAfter){
   if(!want.length){ if(renderAfter) renderAll(); return Promise.resolve(); }
   st.loading = true;
   if(renderAfter) renderAll();
-  /* Batched loading: 12 concurrent record reads at a time, rendering after
-     each batch, so a long season loads progressively instead of storming
-     the RPC mirrors with hundreds of parallel calls. */
-  var BATCH = 12;
-  var chain = Promise.resolve();
-  var self = this;
-  function loadBatch(slice){
-    var jobs = slice.map(function(ep){
-      return (room.contract !== CONTRACT ? rpcRetryC(room.contract, "get_epoch", {room_id: room.cid, epoch: ep}, 4) : rpcRetry("get_epoch", {room_id: id, epoch: ep}, 4)).then(function(rec){
-        if(rec){
-          var list = state.epochsByRoom[id] || (state.epochsByRoom[id] = []);
-          if(!list.some(function(x){ return x.epoch === rec.epoch; })){
-            list.push(rec);
-            list.sort(function(a,b){ return a.epoch - b.epoch; });
-          }
-          delete st.failed[ep];
-        } else {
-          /* The contract answers null both for a record it cannot serve
-             and for an epoch with no record at all. Only flag the epoch
-             when the freshest room read still shows it below the settled
-             frontier and no copy of the record has landed meanwhile (a
-             concurrent load cycle may have beaten this late null back). */
-          var fresh = state.rooms.filter(function(x){ return x.id === id; })[0];
-          var landed = (state.epochsByRoom[id] || []).some(function(x){ return x.epoch === ep; });
-          if(!landed && fresh && ep < fresh.next_epoch_to_settle) st.failed[ep] = true;
-        }
-      }).catch(function(){
-        var landed = (state.epochsByRoom[id] || []).some(function(x){ return x.epoch === ep; });
-        if(!landed) st.failed[ep] = true;
+  /* Worker-pool loading: 12 workers pull epochs from the recent-first
+     queue, so one slow or retrying record never gates the rest. The old
+     barrier batches waited for the slowest of each 12 before starting
+     the next, and under mirror throttling a single stuck call held a
+     whole batch; a 288-epoch season needed 24 such gates and took
+     minutes. Each read tries fastnear, then the archival mirror, then
+     fastnear again (the public near.org mirror is left out of this
+     path while it drops connections); an epoch that still fails stays
+     flagged and the next load cycle retries it, since the want list is
+     rebuilt from the records still missing. */
+  var WORKERS = 12;
+  var cursor = 0;
+  var sinceRender = 0;
+  function fetchEpoch(ep){
+    var seq = [0, 1, 0];
+    var delays = [500, 1200];
+    function call(att){
+      return room.contract !== CONTRACT ? rpcOnceC(room.contract, "get_epoch", {room_id: room.cid, epoch: ep}, att)
+                                        : rpcOnce("get_epoch", {room_id: id, epoch: ep}, att);
+    }
+    function go(i){
+      return call(seq[i]).catch(function(e){
+        if(i >= seq.length - 1) throw e;
+        return new Promise(function(res){ setTimeout(res, delays[i]); }).then(function(){ return go(i + 1); });
       });
+    }
+    return go(0);
+  }
+  function storeRec(ep, rec){
+    if(rec){
+      var list = state.epochsByRoom[id] || (state.epochsByRoom[id] = []);
+      if(!list.some(function(x){ return x.epoch === rec.epoch; })){
+        list.push(rec);
+        list.sort(function(a,b){ return a.epoch - b.epoch; });
+      }
+      delete st.failed[ep];
+    } else {
+      /* The contract answers null both for a record it cannot serve
+         and for an epoch with no record at all. Only flag the epoch
+         when the freshest room read still shows it below the settled
+         frontier and no copy of the record has landed meanwhile (a
+         concurrent load cycle may have beaten this late null back). */
+      var fresh = state.rooms.filter(function(x){ return x.id === id; })[0];
+      var landed = (state.epochsByRoom[id] || []).some(function(x){ return x.epoch === ep; });
+      if(!landed && fresh && ep < fresh.next_epoch_to_settle) st.failed[ep] = true;
+    }
+  }
+  function worker(){
+    if(cursor >= want.length) return Promise.resolve();
+    var ep = want[cursor++];
+    return fetchEpoch(ep).then(function(rec){
+      storeRec(ep, rec);
+    }).catch(function(){
+      var landed = (state.epochsByRoom[id] || []).some(function(x){ return x.epoch === ep; });
+      if(!landed) st.failed[ep] = true;
+    }).then(function(){
+      sinceRender++;
+      if(renderAfter && sinceRender >= 12){ sinceRender = 0; renderAll(); }
+      return worker();
     });
-    return Promise.all(jobs).then(function(){ if(renderAfter) renderAll(); });
   }
-  for(var b0=0; b0<want.length; b0+=BATCH){
-    (function(slice){ chain = chain.then(function(){ return loadBatch(slice); }); })(want.slice(b0, b0+BATCH));
-  }
-  return chain.then(function(){
+  var pool = [];
+  for(var w=0; w<Math.min(WORKERS, want.length); w++) pool.push(worker());
+  return Promise.all(pool).then(function(){
     st.loading = false;
     if(renderAfter) renderAll();
     snapSave();
