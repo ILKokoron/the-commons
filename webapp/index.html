@@ -2128,7 +2128,17 @@ function renderEpochs(){
   tbody.innerHTML = shownEpochs.map(function(e){
     var snapshot = big(e.pool_after) + big(e.total_paid);
     var req = big(e.total_requested), paid = big(e.total_paid);
-    var alloc = (e.reveals || []).length === 0 ? "No reveals" : (req > snapshot ? (paid < req ? "Pro-rata" : "Capped") : "In full");
+    /* Allocation label, computed the way the contract runs it (the
+       same rule as dOversub): clip every request at the per-feeder
+       cap, sum the payables, and compare against the payout budget:
+       the snapshot, or in a Paced room the snapshot divided by the
+       epochs remaining. Pro-rata only when payables exceed the
+       budget; Capped when the cap clipped a request but the budget
+       covered the payables; otherwise In full. */
+    var capY = snapshot * big(r.cap_bps) / 10000n;
+    var payable = (e.reveals || []).reduce(function(sum, rv){ var a = big(rv.amount); return sum + (a < capY ? a : capY); }, 0n);
+    var budget = r.regime === "paced" ? snapshot / big(Math.max(1, Number(r.season_epochs) - Number(e.epoch))) : snapshot;
+    var alloc = (e.reveals || []).length === 0 ? "No reveals" : (payable > budget ? "Pro-rata" : (payable < req ? "Capped" : "In full"));
     return '<tr class="ep-row" data-ep="' + e.epoch + '"><td><b>' + e.epoch + '</b></td><td>' + fmtNear(snapshot.toString()) + '</td><td>' + fmtNear(e.total_requested) + '</td><td>' + fmtNear(e.total_paid) + '</td><td>' + (e.reveals ? e.reveals.length : e.reveal_count) + '</td><td>' + alloc + '</td></tr>';
   }).join("");
   Array.prototype.forEach.call(tbody.querySelectorAll("[data-ep]"), function(tr){
@@ -2673,7 +2683,7 @@ function scanReports(){
   var found = [];
   sources.forEach(function(src){
     var nulls = 0;
-    for(var i = 0; i < 64; i++){
+    for(var i = 0; i < 512; i++){
       (function(i){
         chain = chain.then(function(){
           if(nulls >= 2) return null;
@@ -2853,7 +2863,10 @@ function loadAgentsAndProfiles(room){
       if(p && (p.display_name || p.bio || p.social)) return p;
       return rpcSoftC(S5, "get_profile", {account: acct}).then(function(p2){
         if(p2 && (p2.display_name || p2.bio || p2.social)) return p2;
-        return rpcSoftC(V2, "get_profile", {account: acct});
+        return rpcSoftC(S3, "get_profile", {account: acct}).then(function(p3){
+          if(p3 && (p3.display_name || p3.bio || p3.social)) return p3;
+          return rpcSoftC(V2, "get_profile", {account: acct});
+        });
       });
     }).then(function(p){
       if(p && p.display_name){ state.profiles[acct] = p; state.profileTried[acct] = true; }
@@ -2893,7 +2906,7 @@ function refresh(){
   }).then(function(rooms){
     var merged = (rooms || []).map(function(r){ r.contract = CONTRACT; r.cid = r.id; return r; });
     var prevV5 = (state.rooms || []).filter(function(x){ return x.contract === S5; });
-    /* The observatory also watches the current contract (v5), so a room
+    /* The observatory also watches the current contract (v6), so a room
        is visible from recruiting on, not only once its season runs.
        v5 rooms carry their contract and contract-local id; their app id
        is offset by 1000 so the per-room state maps never collide with
@@ -3239,7 +3252,7 @@ function refreshCreateState(f, dep){
     hint.textContent = "The create button unlocks when the form is valid and the exact deposit is shown above.";
   }else{
     btn.disabled = false;
-    hint.textContent = "Signed by " + accountId + " against " + S5 + ".";
+    hint.textContent = "Signed by " + accountId + " against " + S6 + ".";
   }
   snapshotCreate(f, dep);
 }
