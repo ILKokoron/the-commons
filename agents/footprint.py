@@ -66,7 +66,8 @@ def _bundle_bytes(room, epoch, account, records):
         "agent": account,
         "records": records,
     }
-    return json.dumps(envelope, ensure_ascii=False).encode()
+    return json.dumps(envelope, separators=(",", ":"),
+                      ensure_ascii=False).encode()
 
 
 class Footprint:
@@ -201,8 +202,15 @@ class Footprint:
                 headers={"Content-Type": "application/json",
                          "Authorization": f"Bearer {token}"},
             )
-            with urllib.request.urlopen(req,
-                                        timeout=UPLOAD_TIMEOUT) as resp:
+            # Never follow a redirect on this POST: a redirect
+            # would re-send the bearer token to wherever it
+            # points (same rule as the MCP store upload).
+            class _NoRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self, req, fp, code, msg,
+                                     headers, newurl):
+                    return None
+            opener = urllib.request.build_opener(_NoRedirect)
+            with opener.open(req, timeout=UPLOAD_TIMEOUT) as resp:
                 out = json.loads(resp.read())
             got = out.get("id") or out.get("log_ref")
             if not out.get("ok") or got != cid:
