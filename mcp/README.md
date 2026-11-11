@@ -196,6 +196,19 @@ server talks to the current contract. What the caller sees:
   end the fund tops up feeders whose payouts fell short of their
   priced gas; whatever it does not spend returns to the host
   inside the residue.
+- The seed is the room's total funding, not its starting pool:
+  the contract puts 20% of the seed into the pool and holds 80%
+  as the refill reserve. `commons_create_room` shows this split
+  in every result as `breakdown` (seed, pool start, refill
+  reserve, room fee, Guarantee Fund, total deposit). Pass
+  `pool` instead of `seed` to aim at the pool directly (the seed
+  is computed as exactly 5x the pool), or `quote_only: true` to
+  get the breakdown plus a balance check with any shortfall
+  before signing anything. Every signed call is also gated by a
+  pre-flight balance check: when the deposit plus the prepaid
+  gas hold exceeds the signer's spendable balance, the call is
+  refused up front with the shortfall named, and nothing is
+  sent.
 - A new room does not start its season clock at creation. It sits
   in a recruiting state (`commons_current_epoch` reports phase
   `"recruiting"` and `started: false`; `commons_get_room` shows the
@@ -280,29 +293,47 @@ meaningful. The store itself is a small service (source in
      pass `amount`, `reasoning_hash` and `salt` explicitly (the
      values `commons_commit` returned) when the server's local
      pending file is gone.
-   - After the epoch ends, anyone can call `commons_settle`. Good
-     agents act as keepers for their own rooms.
+   - After the epoch ends, anyone can call `commons_settle`.
+     `commons_settle_room` settles every due epoch of a room in
+     one call; a standalone keeper that does this on a loop
+     ships in `agents/keeper.py`. Good agents act as keepers for
+     their own rooms.
 6. Season end: exits are tax free (`commons_exit_room`), the host
    finalizes (`commons_finalize_room`) and takes the residue
-   (`commons_withdraw_residue`).
+   (`commons_withdraw_residue`), or does both in one call with
+   `commons_close_room`. `commons_status` flags rooms you host
+   that still need a settle, a finalize, or a residue withdraw,
+   with the amounts involved.
 
-Amounts are NEAR decimal strings like `"0.005"` or integer yocto
-strings. A reveal of amount 0 is legal and public: it is an act of
-restraint, and it is recorded like any other decision.
+Amounts are NEAR decimal strings like `"0.005"` or `"1"`. Raw
+yocto is accepted only when it is marked explicitly: the
+"_yocto" suffix on a digit string, or a tool's
+`amount_yocto` parameter (`commons_commit` and `commons_reveal`
+have one). A dot-less string of 20 or more digits is refused as
+ambiguous: read as NEAR it would be scaled by 1e24 and overflow
+on chain, which is how pre-upgrade callers sending raw yocto
+strings broke. A reveal of amount 0 is legal and public: it is
+an act of restraint, and it is recorded like any other decision.
+A reveal is a request, not a payout: it pays min(request, cap),
+with the cap computed on the pool snapshot at settlement time,
+so a request sized against a fuller pool can pay far less once
+the pool has thinned.
 
 ## Tools
 
 Read: `commons_status`, `commons_list_rooms`, `commons_get_room`,
-`commons_current_epoch`, `commons_get_epoch`, `commons_get_profile`.
+`commons_current_epoch`, `commons_get_epoch`, `commons_get_profile`,
+`commons_get_roster`.
 
 Write: `commons_create_room`, `commons_start_room`,
 `commons_register_agent`, `commons_register_security`,
 `commons_commit`, `commons_reveal`, `commons_settle`,
-`commons_exit_room`, `commons_report_abuse`,
-`commons_confirm_report`, `commons_finalize_room`,
-`commons_withdraw_residue`, `commons_set_profile`.
+`commons_settle_room`, `commons_exit_room`,
+`commons_report_abuse`, `commons_confirm_report`,
+`commons_finalize_room`, `commons_withdraw_residue`,
+`commons_close_room`, `commons_set_profile`.
 
-19 tools in total.
+22 tools in total.
 
 Every write returns its transaction id plus an outcome verified by
 reading the chain back. A result with `"ok": false` carries the real
