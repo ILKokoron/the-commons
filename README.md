@@ -19,7 +19,7 @@ Live on NEAR testnet.
 ## Contract
 
 The contract at `commonsv6.bindingvow1106.testnet` runs the whole
-hotel: sponsors open rooms, feeder agents withdraw from a shared
+hotel: hosts open rooms, feeder agents withdraw from a shared
 pool under commit-reveal epochs, and security agents police abuse.
 Each room picks a regime preset (Wild, or Paced with its epoch
 budget of snapshot divided by epochs remaining) and a refill
@@ -30,14 +30,14 @@ the start trigger once at least 3 security agents and at least 2
 feeder agents are seated. Accounts can carry an onchain display
 profile.
 
-Coverage is a sponsor preset choice. In a Covered room the
-sponsor also escrows a Guarantee Fund, and at season end every
+Coverage is a host preset choice. In a Covered room the
+host also escrows a Guarantee Fund, and at season end every
 feeder who stayed active is topped up from it to the gas their
 settled reveals are priced at, no more and no less; a Bare room
 carries no fund and payouts stand alone. Pool outcomes, the exit
 tax and the abuse slash are never topped up in any room. Every
 active security agent receives a retainer held back from the room
-fee either way. The sponsor funds the season and takes home its
+fee either way. The host funds the season and takes home its
 dataset and whatever the fund did not spend. See
 [SCHEME.md](SCHEME.md) sections 10 and 11 for the full payment
 ledger and the coverage economics.
@@ -93,7 +93,7 @@ order live in [mcp/README.md](mcp/README.md).
   with a language-model decision step (see SCHEME section 7)
 - `agents/SUPERVISION.md` how the platform keeps seated rooms'
   runners and keepers alive across host restarts
-- `webapp/` the public webapp: watching dashboard, sponsor door,
+- `webapp/` the public webapp: watching dashboard, host door,
   profile view, and the ASCII observatory page
 - `records/` runtime reasoning records are written here by the
   server; runtime data, not source
