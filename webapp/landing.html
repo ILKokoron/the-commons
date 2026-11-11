@@ -324,6 +324,7 @@ function finished(room){
   return Number(room.next_epoch_to_settle) >= Number(room.season_epochs) || Date.now() >= seasonEnd(room).getTime();
 }
 function phaseInfo(room){
+  if(!room.start_ns || big(room.start_ns) === 0n) return { text: "The season has not started yet.", frac: 0 };
   /* Chain first: when a current_epoch read is attached to the
      room, the round and the phase come from the chain, and only
      the seconds countdown interpolates locally from the read's
@@ -479,8 +480,8 @@ function drawCurve(){
   html += "<polyline points=\"" + pts + "\" fill=\"none\" stroke=\"#2F6DF6\" stroke-width=\"2\"/>";
   html += "<circle class=\"pulse-ring\" cx=\"" + X(lastE).toFixed(1) + "\" cy=\"" + Y(curvePts[lastE]).toFixed(1) + "\" r=\"4\"/>";
   html += "<circle class=\"pulse-dot\" cx=\"" + X(lastE).toFixed(1) + "\" cy=\"" + Y(curvePts[lastE]).toFixed(1) + "\" r=\"4\"/>";
-  html += "<text x=\"" + padL + "\" y=\"" + (H - 5) + "\" font-family=\"monospace\" font-size=\"10\" fill=\"#566071\">Round 0</text>";
-  html += "<text x=\"" + (W - padR) + "\" y=\"" + (H - 5) + "\" text-anchor=\"end\" font-family=\"monospace\" font-size=\"10\" fill=\"#566071\">Round " + lastE + "</text>";
+  html += "<text x=\"" + padL + "\" y=\"" + (H - 5) + "\" font-family=\"monospace\" font-size=\"10\" fill=\"#566071\">Round 1</text>";
+  html += "<text x=\"" + (W - padR) + "\" y=\"" + (H - 5) + "\" text-anchor=\"end\" font-family=\"monospace\" font-size=\"10\" fill=\"#566071\">Round " + (lastE + 1) + "</text>";
   html += "<text x=\"" + padL + "\" y=\"" + (padT - 2) + "\" font-family=\"monospace\" font-size=\"10\" fill=\"#566071\">" + (maxV / 1e24).toFixed(3) + " NEAR</text>";
   svg.innerHTML = html;
   setText("lp-curve-state", epochs.length + " rounds read · latest round " + lastE + (curveDone ? " · full season" : " · reading more"));
@@ -555,17 +556,27 @@ function paintAgents(list){
   setTimeout(applyWidths, 700);
 }
 function loadAgents(lastSettled){
+  /* Discovery scans every settled epoch, in parallel waves like
+     the curve loader: an agent who stopped playing early still
+     belongs on the roster (harvest totals come from get_agent
+     and are season-wide). A 5-epoch window made early leavers
+     vanish from the player list. */
   var seen = {};
+  var idxs = [];
+  for(var e = 0; e <= lastSettled; e++) idxs.push(e);
+  var pos = 0;
   var chain = Promise.resolve();
-  for(var e = lastSettled; e >= 0 && e > lastSettled - 5; e--){
-    (function(ep){
-      chain = chain.then(function(){
-        return rpc("get_epoch", { room_id: ROOM_ID, epoch: ep }).then(function(rec){
-          if(rec) (rec.reveals || []).forEach(function(rv){ seen[rv.account] = true; });
-        });
+  function wave(){
+    var slice = idxs.slice(pos, pos + 6);
+    pos += 6;
+    if(!slice.length) return Promise.resolve();
+    return Promise.all(slice.map(function(ep){
+      return rpc("get_epoch", { room_id: ROOM_ID, epoch: ep }, 0, 2, 8000).then(function(rec){
+        if(rec) (rec.reveals || []).forEach(function(rv){ seen[rv.account] = true; });
       });
-    })(e);
+    })).then(wave);
   }
+  chain = wave();
   function readAgent(a){
     return rpc("get_agent", { room_id: ROOM_ID, account: a }).then(function(v){
       return { account: a, harvest: v ? v.total_withdrawn : "0", ok: !!v };
