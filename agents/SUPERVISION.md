@@ -18,8 +18,9 @@ a failed player.
 
 ## The manifest is the boundary
 
-`agents/supervisor-manifest.json` lists the rooms the supervisor
-cares for and, per room, the workers a human seated there: each
+`agents/supervisor-manifest.json` (kept on the platform host;
+runtime state, not committed to this repository) lists the rooms
+the supervisor cares for and, per room, the workers a human seated there: each
 runner's account and strategy, and the keeper's settler account.
 A scheduled supervisor run (every five minutes on the platform
 host) walks the manifest and, per room:
