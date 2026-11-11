@@ -1851,10 +1851,12 @@ function sceneFor(room){
 }
 
 /* ---------- agent assembly: chain views merged with epoch-derived data ---------- */
-/* The v1 contract exposes no agent roster. Discovery sources, all verified
-   through get_agent before display: accounts that revealed in loaded epochs,
-   reporters and targets of on-chain abuse reports, and the platform's own
-   operator accounts (the demo fleet and the first external operator). */
+/* The v1 contract exposes no agent roster. On v7, get_roster seeds the
+   agent views directly (see loadRosterInto). Other discovery sources, all
+   verified through get_agent before display: accounts that revealed in
+   loaded epochs, reporters and targets of on-chain abuse reports, and the
+   platform's own operator accounts (the demo fleet and the first external
+   operator). */
 var KNOWN_ACCOUNTS = [
   "judge1.bindingvow1106.testnet", "judge2.bindingvow1106.testnet", "judge3.bindingvow1106.testnet",
   "exam1.bindingvow1106.testnet", "exam2.bindingvow1106.testnet", "exam3.bindingvow1106.testnet",
@@ -2070,7 +2072,7 @@ function renderRoomDetail(){
     + '<div class="kv"><span>Settled epochs</span><b>' + r.next_epoch_to_settle + '</b></div>');
   paintRdTank();
   var assembled = agentRows(r);
-  setText("rd-agents-tag", assembled.rows.length + " agents with records");
+  setText("rd-agents-tag", state.agentsLoadedByRoom[r.id] ? (assembled.rows.length + " agents with records") : "Reading agents");
   if(!assembled.rows.length){
     setHTML("rd-agents", '<tr><td>No agent records loaded for this room yet</td><td></td><td></td><td></td><td></td></tr>');
   } else {
@@ -2959,6 +2961,24 @@ function renderGlobalBoard(){
 }
 function loadAgentsAndProfiles(room){
   if(!room) return;
+  var earlyMap = state.agentsByRoom[room.id] || (state.agentsByRoom[room.id] = {});
+  return loadRosterInto(room, earlyMap).then(function(){ return loadAgentsAndProfilesProbed(room); });
+}
+/* v7 rooms expose get_roster, the full seated roster in one call.
+   Prefill the agent views from it: every seated agent then appears in
+   Participants, including outside operators the hardcoded discovery
+   list below cannot know, and the table no longer depends on a dozen
+   per-account probes landing. Older contracts have no roster view,
+   so they keep the discovery path. */
+function loadRosterInto(room, map){
+  if(roomContract(room) !== S7) return Promise.resolve();
+  return rpcRetryC(S7, "get_roster", {room_id: roomCid(room)}, 3).then(function(list){
+    if(Array.isArray(list)) list.forEach(function(av){
+      if(av && av.account) map[av.account] = av;
+    });
+  }).catch(function(){});
+}
+function loadAgentsAndProfilesProbed(room){
   var seen = {};
   (state.epochsByRoom[room.id] || []).forEach(function(e){
     (e.reveals || []).forEach(function(rv){ seen[rv.account] = true; });
@@ -2967,6 +2987,7 @@ function loadAgentsAndProfiles(room){
   state.reports.forEach(function(rep){
     if(rep.room_id === room.id){ seen[rep.reporter] = true; seen[rep.target] = true; }
   });
+  Object.keys(state.agentsByRoom[room.id] || {}).forEach(function(a){ seen[a] = true; });
   var accts = Object.keys(seen);
   state.discoveredAccounts = state.discoveredAccounts || {};
   accts.forEach(function(a){ state.discoveredAccounts[a] = true; });
