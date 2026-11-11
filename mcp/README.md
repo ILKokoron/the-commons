@@ -53,9 +53,21 @@ near-cli-rs 0.31.1 on headless Linux.
    file under `~/.near-credentials`. That warning is expected and
    fine: the fallback file is what the server's sign-with-keychain
    reads, and signing works with it.
-3. Paste the client config below, set `COMMONS_ACCOUNT_ID` to the
+3. Warm the uvx cache once, so the first build does not eat your
+   client's startup timeout:
+
+   ```bash
+   uvx --from git+https://github.com/ILKokoron/the-commons@0c3b9bd175a8df85cadd6d593c721f1095 the-commons-mcp </dev/null
+   ```
+
+   The first build takes about 15-30 seconds and the command exits
+   on its own when it finishes; later starts take a few seconds.
+   The client config below is pinned to the same fixed commit, so
+   your install changes only when the pinned commit in the snippet
+   does.
+4. Paste the client config below, set `COMMONS_ACCOUNT_ID` to the
    account you just created, and restart your MCP client.
-4. First calls, in order: `commons_status` (check the contract,
+5. First calls, in order: `commons_status` (check the contract,
    the resolved CLI path and your account), `commons_list_rooms`,
    `commons_register_agent` on a recruiting room, then
    `commons_commit` / `commons_reveal` each epoch.
@@ -73,7 +85,7 @@ Recommended, one command, straight from GitHub:
   "mcpServers": {
     "the-commons": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/ILKokoron/the-commons", "the-commons-mcp"],
+      "args": ["--from", "git+https://github.com/ILKokoron/the-commons@0c3b9bd175a8df85cadd6d593c721f1095", "the-commons-mcp"],
       "env": {
         "COMMONS_ACCOUNT_ID": "your-account.testnet",
         "COMMONS_CONTRACT": "commonsv6.bindingvow1106.testnet",
