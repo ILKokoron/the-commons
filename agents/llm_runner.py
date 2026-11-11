@@ -178,7 +178,36 @@ def _near(yocto):
     return f"{Decimal(int(yocto)) / Decimal(10**24):.6f}"
 
 
-def llm_decide(room, epoch):
+_LLM_MAX_AMOUNT = Decimal("1000000")
+
+
+def _parse_llm_amount(raw):
+    """Parse the model's amount_near as an exact NEAR Decimal.
+
+    The value arrives as JSON: a number like 0.00005 reaches us as
+    the Python float string '5e-05', which Decimal reads correctly
+    as 0.00005 NEAR. The previous parser regex-grabbed the first
+    digit run instead, turning '5e-05' into 5 NEAR, '-0.5' into
+    +0.5, and a yocto-denominated answer into a capped maximum
+    take. Anything unparsable, negative, non-finite, or absurdly
+    large raises here, and llm_decide turns that into the safe
+    fallback of committing 0."""
+    try:
+        amt = Decimal(str(raw).strip().replace(",", ""))
+    except Exception:
+        raise ValueError(f"amount_near not numeric: {str(raw)[:60]}")
+    if amt.is_nan() or amt.is_infinite():
+        raise ValueError(f"amount_near not finite: {str(raw)[:60]}")
+    if amt < 0:
+        raise ValueError(f"amount_near negative: {str(raw)[:60]}")
+    if amt > _LLM_MAX_AMOUNT:
+        raise ValueError(
+            f"amount_near implausibly large (unit error?): "
+            f"{str(raw)[:60]}")
+    return amt
+
+
+def llm_decide(room, epoch, window_secs=None):
     """Ask the LLM for (amount_yocto_str, reasoning_text).
 
     Any failure at all returns the safe fallback of 0 with the
@@ -186,6 +215,10 @@ def llm_decide(room, epoch):
     accidental greed.
     """
     try:
+        if window_secs is not None and window_secs < 75:
+            return "0", (f"Commit window nearly closed "
+                         f"({int(window_secs)}s left); committing 0 "
+                         "without spending it on an LLM call.")
         pool = int(room["pool_balance"])
         reserve = int(room["refill_reserve"])
         refill = int(room["refill_per_epoch"])
@@ -220,6 +253,9 @@ def llm_decide(room, epoch):
         obj = None
         resp = {}
         last_err = None
+        attempt_timeout = 100
+        if window_secs is not None:
+            attempt_timeout = max(20, min(100, int(window_secs) - 45))
         for attempt, (budget, extra) in enumerate([
                 (2500, ""),
                 (4000, " Be decisive: keep the thinking short, "
@@ -227,15 +263,21 @@ def llm_decide(room, epoch):
 
             messages = list(base_messages)
             if extra:
-                messages.append({"role": "user", "content":
-                                   user + extra})
+                # Amend the single user message; appending a second
+                # full copy of the prompt doubles the tokens and
+                # leaves two competing instruction copies.
+                messages = [
+                    {"role": m["role"], "content": user + extra}
+                    if m["role"] == "user" else m
+                    for m in messages]
             with open("/tmp/commons-llm-messages.json", "w") as f:
                 json.dump(messages, f)
             proc = subprocess.run(
                 [sys.executable, LLM_CHAT,
                  "--messages-file", "/tmp/commons-llm-messages.json",
                  "--max-tokens", str(budget), "--temperature", "0.3"],
-                capture_output=True, text=True, timeout=100)
+                capture_output=True, text=True,
+                timeout=attempt_timeout)
             if proc.returncode != 0:
                 last_err = RuntimeError(
                     f"chat helper rc={proc.returncode}: "
@@ -265,15 +307,8 @@ def llm_decide(room, epoch):
                 f"finish={resp['choices'][0].get('finish_reason')})")
         if obj is None:
             raise last_err or ValueError("no reply")
-        raw_amt = str(obj["amount_near"]).replace(",", "")
-        m_amt = re.search(r"\d+(?:\.\d+)?", raw_amt)
-        if not m_amt:
-            raise ValueError(
-                f"amount_near not numeric: {raw_amt[:60]}")
-        amt = Decimal(m_amt.group(0))
+        amt = _parse_llm_amount(obj["amount_near"])
         amt_yocto = int(amt * (10**24))
-        if amt_yocto < 0:
-            amt_yocto = 0
         if amt_yocto > cap_yocto:
             amt_yocto = cap_yocto
         reasoning = str(obj.get("reasoning", "")).strip()[:500]             or "No reasoning given."
@@ -357,6 +392,8 @@ async def main():
                     _line = _line.strip()
                     if "=" in _line and not _line.startswith("#"):
                         _k, _, _v = _line.partition("=")
+                        _k = _k.strip()
+                        _v = _v.strip()
                         if _k in ("COMMONS_STORE_URL",
                                   "COMMONS_STORE_TOKEN") \
                                 and _k not in env:
@@ -367,6 +404,7 @@ async def main():
         command=sys.executable, args=[SERVER], env=env)
 
     committed, revealed, triples = load_state(args.account, args.room)
+    settle_attempts = {}
     started = time.time()
     fp = Footprint(args.account, args.room, on_log=log) \
         if Footprint is not None else None
@@ -447,7 +485,9 @@ async def main():
                         if info["phase"] == "commit" \
                                 and epoch not in committed:
                             if args.strategy == "llm":
-                                amount, text = llm_decide(room, epoch)
+                                amount, text = llm_decide(
+                                    room, epoch,
+                                    window_secs=phase_remaining)
                             else:
                                 amount, text = decide(args.strategy,
                                                       room, epoch)
@@ -547,6 +587,15 @@ async def main():
                                               "epoch": e})
                             if chk.get("ok"):
                                 continue  # settled already; never pay
+                            if "is not settled yet" not in \
+                                    str(chk.get("error", "")):
+                                log(f"epoch {e}: get_epoch read "
+                                    f"failed ({str(chk.get('error', ''))[:100]}); "
+                                    "not settling on a failed read")
+                                break
+                            if time.time() - settle_attempts.get(e, 0) < 30:
+                                break
+                            settle_attempts[e] = time.time()
                             res = await game_call(
                                 session, "commons_settle",
                                 {"room_id": args.room, "epoch": e},
