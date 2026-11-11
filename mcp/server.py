@@ -143,6 +143,11 @@ def _resolve_near_cli():
 
 
 NEAR_CLI, NEAR_CLI_SOURCE = _resolve_near_cli()
+if NEAR_CLI is None:
+    print("warning: no near CLI binary resolved (COMMONS_NEAR_CLI "
+          "unset, near not on PATH, built-in default path absent); "
+          "read tools work, but write tools will fail until "
+          "COMMONS_NEAR_CLI points at the binary", file=sys.stderr)
 # The platform record store is the default commit path (issue 6):
 # its URL is a platform constant from the registry, so a commit
 # publishes whenever a write token is configured, with no per-
