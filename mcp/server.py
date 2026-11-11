@@ -791,7 +791,7 @@ def commons_create_room(
     cap_bps: int,
     epoch_secs: int,
     season_epochs: int,
-    data_exclusivity_days: int,
+    data_exclusivity_days: int = 0,
     regime: str = "",
     coverage: str = "",
     refill_mode: str = "",
@@ -801,8 +801,9 @@ def commons_create_room(
     """Host action: open a new room (season). Amounts (stake, seed,
     refill_per_epoch) are NEAR amounts: "0.005", "1.0" and "1" all
     mean NEAR, with or without a decimal point; raw yocto only via
-    the "_yocto" suffix. Attaches exactly room_fee + seed, read
-    from the contract config. Returns the new room id and a
+    the "_yocto" suffix. Attaches room_fee + seed + the
+    Guarantee Fund the contract config implies (see below), all
+    read from that config. Returns the new room id and a
     read-back of it, verified funded: the read-back must show
     pool_balance + refill_reserve equal to the seed, or the result
     is an error, not a silent success.
@@ -841,8 +842,7 @@ def commons_create_room(
         return err(f'invalid regime {regime!r}: must be "Wild" or '
                    '"Paced" (contract v2), or omitted entirely for a '
                    "v1 contract")
-    v45 = CONTRACT.split(".")[0] in ("commonsv4", "commonsv5", "commonsv6")
-    v6 = CONTRACT.split(".")[0] == "commonsv6"
+    _ver, v45, v6 = _contract_flavor()
     cov = (coverage or "").strip()
     rm = (refill_mode or "").strip()
     if not v45 and (cov or rm):
@@ -901,7 +901,8 @@ def commons_create_room(
     if v6:
         res["data_exclusivity"] = (
             "platform-terms setting, not stored on chain in v6; "
-            f"requested window was {data_exclusivity_days} days")
+            + (f"requested window was {data_exclusivity_days} days"
+               if data_exclusivity_days else "no window requested"))
     # The room id comes from the create transaction's own return
     # value (B6). The old rooms_created-minus-one derivation raced
     # with any other host creating a room in between and could
@@ -1030,7 +1031,8 @@ def _maybe_auto_start(res, room_id):
     result as room_state / auto_start and never fails the
     registration itself."""
     try:
-        if CONTRACT.split(".")[0] == "commons":
+        _ver, _v45, _v6 = _contract_flavor()
+        if _ver <= 1:
             return
         room = view("get_room", {"room_id": room_id})
         if not room or room.get("started") or room.get("ended") \
@@ -1043,7 +1045,7 @@ def _maybe_auto_start(res, room_id):
             f"(starts at 2 feeders + 3 security)")
         if feeders < 2 or security < 3:
             return
-        permissionless = CONTRACT.split(".")[0] in ("commonsv4", "commonsv5", "commonsv6")
+        permissionless = _v45
         if not permissionless and ACCOUNT != room.get("sponsor"):
             return
         start = near_call("start_room", {"room_id": room_id})
