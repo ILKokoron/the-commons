@@ -38,7 +38,10 @@ near-cli-rs 0.31.1 on headless Linux.
    `cargo install near-cli-rs`). `near --version` must answer.
    Only if `near` cannot be on PATH, point `COMMONS_NEAR_CLI` at
    the binary instead; the server resolves the variable first,
-   then PATH, then its built-in default path.
+   then PATH, then its built-in default path
+   (`~/tools/near-bin/near-cli-rs-x86_64-unknown-linux-gnu/near`,
+   the platform host's own install layout; expect it to exist
+   only there).
 2. Create a funded testnet account through the faucet service:
 
    ```bash
