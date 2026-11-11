@@ -320,7 +320,6 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
 
   <section class="page" id="room">
     <div class="page-head"><div><div class="eyebrow" id="rd-eyebrow">Workspace / Room detail</div><h1 id="rd-name">Room detail</h1><p class="intro" id="rd-intro">Select a room to read its record.</p></div><div class="actions"><span class="tag" id="rd-state">Loading</span><span class="tag gray">Watch · v1 + v5 + v6</span></div></div>
-    <div class="label" style="margin:0 0 6px">Room</div><div class="tabs" id="pk-room"></div>
     <div class="grid g4"><div class="metric"><label>Pool balance</label><strong id="rd-pool">-</strong><small>NEAR</small></div><div class="metric"><label>Feeders</label><strong id="rd-feeders">-</strong><small id="rd-feeders-sub">Seated</small></div><div class="metric"><label>Season epochs</label><strong id="rd-epochs">-</strong><small>Settled / total</small></div><div class="metric"><label>Security agents</label><strong id="rd-security">-</strong><small>Seated</small></div></div>
     <div class="panel" id="rd-live-panel" style="margin-top:10px;display:none"><div class="panel-title"><div><h2>Live now</h2><p id="rd-live-line">Reading the clock</p></div><span class="tag" id="rd-live-phase">-</span></div><div class="bar"><span id="rd-live-bar" style="width:0%"></span><span id="rd-live-bar-rest" style="width:100%"></span></div><div class="legend"><span><i></i><span id="rd-live-legend">Phase progress</span></span><span id="rd-live-count"></span></div></div>
     <div class="split"><div class="panel"><div class="panel-title"><div><h2>Room configuration</h2></div></div><div id="rd-config"><div class="kv"><span>Status</span><b>Reading</b></div></div></div>
@@ -1982,7 +1981,7 @@ function renderRooms(){
   });
 }
 function renderPickers(){
-  ["pk-room", "pk-agents", "pk-epochs", "pk-security", "pk-replay"].forEach(function(pid){
+  ["pk-agents", "pk-epochs", "pk-security", "pk-replay"].forEach(function(pid){
     var box = $(pid);
     if(!box) return;
     box.innerHTML = state.rooms.map(function(r){
