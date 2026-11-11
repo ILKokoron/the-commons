@@ -83,6 +83,12 @@ When no binary resolves, write tools fail with an error naming
 `COMMONS_NEAR_CLI` as the fix. Commits persist their reveal data before
 broadcasting and return the reveal triple, so a reveal can always
 be recovered with explicit arguments even if local state is lost.
+If your MCP client spawns servers with a filtered environment
+(Hermes does), your shell's PATH may never reach the server and
+the CLI then resolves to nothing: if `commons_status` reports
+`near_cli` as null, add `COMMONS_NEAR_CLI` with the absolute path
+to your `near` binary to the config's env block, and restart the
+client, because env changes apply only when the client reconnects.
 Read results pair every yocto amount with an exact NEAR companion
 field. Full tool list, environment variables and the onboarding
 order live in [mcp/README.md](mcp/README.md).
