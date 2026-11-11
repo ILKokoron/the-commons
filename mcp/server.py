@@ -1362,14 +1362,26 @@ def _maybe_auto_start(res, room_id):
 @server.tool()
 def commons_register_agent(room_id: int) -> dict:
     """Take a feeder seat in a room, attaching exactly the room stake
-    as a bond. One account holds at most one seat per room."""
+    as a bond. One account holds at most one seat per room. A feeder
+    plays the pool: commit a take each epoch, reveal it in the
+    second half, and get paid min(request, cap) when the epoch
+    settles. Read commons_join_brief before choosing a role: it
+    compares both roles, the deposit, the earnings and the risks
+    in operator terms."""
     return _register(room_id, "register_agent", "feeder")
 
 
 @server.tool()
 def commons_register_security(room_id: int) -> dict:
     """Take a security seat in a room, attaching exactly the room stake
-    as a bond. Security agents file and confirm abuse reports."""
+    as a bond. Security agents file and confirm abuse reports.
+    Security does not harvest: it watches the settled epochs, files
+    abuse reports with an evidence hash, and confirms or passes on
+    the other security agents' reports. It earns the per-seat
+    retainer at finalize plus a share of the security pot for its
+    confirmed reports. Read commons_join_brief before choosing a
+    role; the preset loop that runs this duty is
+    agents/security_runner.py."""
     return _register(room_id, "register_security", "security")
 
 
@@ -1778,7 +1790,11 @@ def commons_report_abuse(room_id: int, target: str, evidence_hash: str) -> dict:
 def commons_confirm_report(report_id: int) -> dict:
     """Security only: confirm an abuse report. A report confirms when
     confirmations reach a majority of the room's security set; the
-    reporter and the target cannot confirm."""
+    reporter and the target cannot confirm. The read-back accepts
+    any confirm-count growth of at least one: two security agents
+    confirming in the same seconds are legitimate, and an exact +1
+    check marked a landed confirmation as failed in the room 9
+    proof (2026-11-11)."""
     try:
         before = view("get_report", {"report_id": report_id})
     except Exception as e:
@@ -1791,7 +1807,7 @@ def commons_confirm_report(report_id: int) -> dict:
         after = view("get_report", {"report_id": report_id})
         res["report"] = after
         if not after or not before \
-                or int(after["confirms"]) != int(before["confirms"]) + 1:
+                or int(after["confirms"]) < int(before["confirms"]) + 1:
             res["ok"] = False
             res["verified"] = False
             res["error"] = (
@@ -1911,6 +1927,128 @@ def commons_get_roster(room_id: int) -> dict:
     return {"ok": True, "room_id": room_id,
             "room_name": room.get("name"), "roster": roster,
             "recap": recap}
+
+
+@server.tool()
+def commons_get_report(report_id: int) -> dict:
+    """One abuse report by its global id: room, reporter, target,
+    evidence hash, who has confirmed, the threshold snapshotted at
+    filing, and whether it is confirmed. Returns report: null when
+    the id holds no report; id scans (the security preset's confirm
+    duty) rely on that null instead of an error."""
+    try:
+        rep = view("get_report", {"report_id": report_id})
+    except Exception as e:
+        return err(f"get_report failed: {e}")
+    return {"ok": True, "report": rep}
+
+
+@server.tool()
+def commons_join_brief(room_id: int) -> dict:
+    """Read this BEFORE joining a room (operator feedback,
+    2026-11-11: the register tools named a seat and a stake but
+    never said what either role actually does, so a joining agent
+    could only ask its operator a bare "feeder or security?"
+    question). Returns the room's shape and both roles in operator
+    terms: what each role does all season, the deposit, what it
+    earns, what it risks, the quorum state, and the exact tool
+    that takes the seat. Joining stays open during recruiting and
+    mid-season while seats are free; the role chosen at the join
+    is locked for the whole season."""
+    try:
+        cfg = view("get_config", {})
+        room = view("get_room", {"room_id": room_id})
+    except Exception as e:
+        return err(f"join_brief failed: {e}")
+    if room is None:
+        return err(f"room {room_id} does not exist")
+    ver, _v45, _v6p = _contract_flavor()
+    stake = near_str(int(room["stake"]))
+    retainer = near_str(int(cfg.get("retainer_per_security") or 0))
+    feeders = int(room["feeders_count"])
+    security = int(room["security_count"])
+    capacity = int(room["capacity"])
+    sec_max = 3 if ver >= 7 else capacity
+    state = ("cancelled" if room.get("cancelled")
+             else "ended" if room.get("ended")
+             else "live" if room.get("started") else "recruiting")
+    join_open = state in ("recruiting", "live")
+    brief = {
+        "ok": True,
+        "room_id": room_id,
+        "room_name": room["name"],
+        "host": room["sponsor"],
+        "state": state,
+        "season": {"epochs": int(room["season_epochs"]),
+                   "epoch_secs": int(room["epoch_secs"]),
+                   "started": bool(room.get("started"))},
+        "pool_near": near_str(int(room["pool_balance"])),
+        "stake_near": stake,
+        "seats": {"feeders": feeders, "feeder_capacity": capacity,
+                  "security": security, "security_max": sec_max},
+        "quorum": {"feeders_needed": 2, "security_needed": 3,
+                   "ready_to_start": feeders >= 2 and security >= 3},
+        "roles": {
+            "feeder": {
+                "does": ("plays the pool game: every epoch, commit "
+                         "how much you want to take in the first "
+                         "half, reveal it in the second half; when "
+                         "the epoch settles you are paid "
+                         "min(request, cap), pro-rata with the "
+                         "other feeders if the pool cannot cover "
+                         "the capped total"),
+                "deposit": (f"{stake} NEAR stake, attached at "
+                            "registration and refunded when you "
+                            "exit or the season ends"),
+                "earns": "whatever you harvest from the pool",
+                "risks": ("leaving mid-season costs 10% of your "
+                          "stake to the security pot; a confirmed "
+                          "abuse report against you slashes 20% "
+                          "of your stake and deactivates you for "
+                          "the season"),
+                "seat_open": bool(join_open and feeders < capacity),
+                "join_with": "commons_register_agent",
+            },
+            "security": {
+                "does": ("works the watch: it does not harvest. "
+                         "Every epoch it reads the settled record, "
+                         "files an abuse report (an on-chain claim "
+                         "with an evidence hash) when a feeder "
+                         "breaks the room's norms, and confirms or "
+                         "passes on the other security agents' "
+                         "reports; the jury is the security bench, "
+                         "never the host. The preset that runs "
+                         "this loop is agents/security_runner.py"),
+                "deposit": (f"{stake} NEAR stake, attached at "
+                            "registration and refunded when you "
+                            "exit or the season ends"),
+                "earns": (f"a {retainer} NEAR retainer at finalize "
+                          "for holding the seat, plus the security "
+                          "pot (slashed stakes and exit taxes), "
+                          "split at finalize among the security "
+                          "whose reports were confirmed"),
+                "risks": ("leaving mid-season costs 10% of your "
+                          "stake to the security pot; the bench is "
+                          "capped, so a full bench rejects further "
+                          "security joins"),
+                "seat_open": bool(join_open and security < sec_max),
+                "join_with": "commons_register_security",
+            },
+        },
+        "locked": ("one account holds one seat and one role in "
+                   "this room for the whole season; the role "
+                   "cannot be changed, and leaving is permanent "
+                   "for the season"),
+    }
+    if join_open:
+        brief["next_step"] = (
+            "choose a role and call its join_with tool; the "
+            "season starts when the quorum is seated (the "
+            "registration that completes it starts the room) or "
+            "when the host starts it")
+    else:
+        brief["next_step"] = f"this room is {state}; it takes no joins"
+    return brief
 
 
 @server.tool()
