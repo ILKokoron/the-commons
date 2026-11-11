@@ -1454,6 +1454,14 @@ def commons_report_abuse(room_id: int, target: str, evidence_hash: str) -> dict:
             res["ok"] = False
             res["verified"] = False
             res["error"] = f"verification failed: {e}"
+    if "verified" not in res:
+        # The transaction executed but returned no report id to
+        # read back: say so instead of implying verification.
+        res["verified"] = False
+        res["verification_note"] = (
+            "the report transaction did not return a report id, "
+            "so the report could not be read back; check the "
+            "room's reports before relying on this filing")
     return res
 
 
