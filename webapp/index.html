@@ -1251,7 +1251,7 @@ var S3 = "commonsv3.bindingvow1106.testnet";
 var S5 = "commonsv5.bindingvow1106.testnet";
 var S6 = "commonsv6.bindingvow1106.testnet";
 var S7 = "commonsv7.bindingvow1106.testnet";
-var REFRESH_MS = 18000;
+var REFRESH_MS = 10000;
 var YOCTO = 1000000000000000000000000n;
 
 var state = { rooms: [], roomsLoaded: false, epochsByRoom: {}, currentByRoom: {}, epochState: {}, selected: null, lastOk: null,
@@ -1276,22 +1276,46 @@ function fetchTO(url, body, consume){
   if(timer){ p = p.then(function(v){ clearTimeout(timer); return v; }, function(e){ clearTimeout(timer); throw e; }); }
   return p;
 }
+function decodeRpc(d){
+  if(d.error) throw new Error(d.error.message || "RPC error");
+  var res = d.result;
+  if(!res || res.error) throw new Error((res && res.error) || "RPC error");
+  var bytes = res.result;
+  if(!bytes || !bytes.length) return null;
+  var s = "";
+  for(var i=0;i<bytes.length;i++) s += String.fromCharCode(bytes[i]);
+  return JSON.parse(decodeURIComponent(escape(s)));
+}
+function b64url(obj){
+  return b64(obj).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function fetchGet(url, consume){
+  /* Same body-timeout discipline as fetchTO, for GET requests. */
+  var ctl = window.AbortController ? new AbortController() : null;
+  var timer = ctl ? setTimeout(function(){ ctl.abort(); }, 8000) : null;
+  var p = fetch(url, {method:"GET", signal: ctl ? ctl.signal : undefined})
+    .then(function(r){ return consume(r); });
+  if(timer){ p = p.then(function(v){ clearTimeout(timer); return v; }, function(e){ clearTimeout(timer); throw e; }); }
+  return p;
+}
+function rpcProxy(contract, fn, args){
+  /* Reads go through the observatory's own /api/rpc first: the function
+     queries the mirrors from Vercel's network (which they answer far
+     more reliably than a browser) and the CDN caches each answer for a
+     few seconds, so the page stops depending on three flaky public
+     mirrors per visitor. Any failure throws and the callers fall back
+     to the direct mirror rotation below. */
+  var u = "/api/rpc?account=" + encodeURIComponent(contract) + "&method=" + encodeURIComponent(fn) + "&args=" + encodeURIComponent(b64url(args));
+  return fetchGet(u, function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }).then(decodeRpc);
+}
 function rpcOnce(fn, args, attempt){
-  var url = RPCS[(attempt || 0) % RPCS.length];
+  if(!attempt) return rpcProxy(CONTRACT, fn, args);
+  var url = RPCS[(attempt - 1) % RPCS.length];
   var body = JSON.stringify({jsonrpc:"2.0", id:"1", method:"query", params:{
     request_type:"call_function", finality:"final",
     account_id:CONTRACT, method_name:fn, args_base64:b64(args)}});
   return fetchTO(url, body, function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
-    .then(function(d){
-      if(d.error) throw new Error(d.error.message || "RPC error");
-      var res = d.result;
-      if(!res || res.error) throw new Error((res && res.error) || "RPC error");
-      var bytes = res.result;
-      if(!bytes || !bytes.length) return null;
-      var s = "";
-      for(var i=0;i<bytes.length;i++) s += String.fromCharCode(bytes[i]);
-      return JSON.parse(decodeURIComponent(escape(s)));
-    });
+    .then(decodeRpc);
 }
 function rpc(fn, args){
   return rpcOnce(fn, args, 0).catch(function(e){
@@ -1706,21 +1730,13 @@ function toggleReplayPlay(){
 
 /* ---------- generic-contract read helpers (v2 profiles, v3 host door) ---------- */
 function rpcOnceC(contract, fn, args, attempt){
-  var url = RPCS[(attempt || 0) % RPCS.length];
+  if(!attempt) return rpcProxy(contract, fn, args);
+  var url = RPCS[(attempt - 1) % RPCS.length];
   var body = JSON.stringify({jsonrpc:"2.0", id:"1", method:"query", params:{
     request_type:"call_function", finality:"final",
     account_id:contract, method_name:fn, args_base64:b64(args)}});
   return fetchTO(url, body, function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
-    .then(function(d){
-      if(d.error) throw new Error(d.error.message || "RPC error");
-      var res = d.result;
-      if(!res || res.error) throw new Error((res && res.error) || "RPC error");
-      var bytes = res.result;
-      if(!bytes || !bytes.length) return null;
-      var s = "";
-      for(var i=0;i<bytes.length;i++) s += String.fromCharCode(bytes[i]);
-      return JSON.parse(decodeURIComponent(escape(s)));
-    });
+    .then(decodeRpc);
 }
 function rpcRetryC(contract, fn, args, attempts){
   var delays = [700, 1600, 3200, 6000];
@@ -2705,7 +2721,7 @@ function loadRoomEpochs(id, renderAfter){
   var cursor = 0;
   var sinceRender = 0;
   function fetchEpoch(ep){
-    var seq = [0, 1, 0, 1];
+    var seq = [0, 1, 2, 0];
     var delays = [300, 800, 1500];
     function call(att){
       return room.contract !== CONTRACT ? rpcOnceC(room.contract, "get_epoch", {room_id: room.cid, epoch: ep}, att)
