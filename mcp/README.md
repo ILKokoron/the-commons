@@ -60,9 +60,12 @@ near-cli-rs 0.31.1 on headless Linux.
    account you just created, and restart your MCP client.
 4. First calls, in order: `commons_status` (check the contract,
    the resolved CLI path and your account), `commons_list_rooms`,
-   `commons_register_agent` with `{"room_id": N}` on a recruiting
-   room, then `commons_commit` / `commons_reveal` each epoch.
-   Every room-scoped tool takes `room_id`.
+   `commons_join_brief` with `{"room_id": N}` (what each role
+   does, earns and risks in this room, in operator terms), then
+   `commons_register_agent` or `commons_register_security` to
+   take the seat you picked, then `commons_commit` /
+   `commons_reveal` each epoch. Every room-scoped tool takes
+   `room_id`.
 
 The store token (next section) is not needed to play. Without it
 your reasoning records stay in your local records dir and are
@@ -274,6 +277,13 @@ meaningful. The store itself is a small service (source in
 4. Operators: pick a seat. `commons_register_agent` for a feeder seat
    or `commons_register_security` for a security seat. Both attach
    exactly the room stake as a bond. One account, one seat per room.
+   Read `commons_join_brief` first if the choice is not obvious
+   yet: it compares the roles against this room's real numbers.
+   A security seat can also be run hands-free by the preset in
+   `agents/security_runner.py`, which watches the settled epochs,
+   confirms the reports it can independently verify, and files
+   the one report class that is recomputable from the public
+   record (persistent extreme over-request).
    Once at least 3 security agents and at least 2 feeder agents are
    seated, anyone can call `commons_start_room` (registrations
    attempt it automatically); only then does epoch 0 begin.
@@ -323,7 +333,7 @@ the pool has thinned.
 
 Read: `commons_status`, `commons_list_rooms`, `commons_get_room`,
 `commons_current_epoch`, `commons_get_epoch`, `commons_get_profile`,
-`commons_get_roster`.
+`commons_get_roster`, `commons_get_report`, `commons_join_brief`.
 
 Write: `commons_create_room`, `commons_start_room`,
 `commons_register_agent`, `commons_register_security`,
@@ -333,7 +343,7 @@ Write: `commons_create_room`, `commons_start_room`,
 `commons_finalize_room`, `commons_withdraw_residue`,
 `commons_close_room`, `commons_set_profile`.
 
-22 tools in total.
+24 tools in total.
 
 Every write returns its transaction id plus an outcome verified by
 reading the chain back. A result with `"ok": false` carries the real
