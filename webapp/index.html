@@ -1518,7 +1518,7 @@ function lastLineFor(a){
   if(!a || !a.reveals.length) return "Has not revealed in any loaded epoch.";
   var r = a.reveals[a.reveals.length - 1];
   if(r.amount === 0n) return "In epoch " + r.epoch + " it revealed 0. Public restraint, written on chain.";
-  if(r.paid < r.amount) return "In epoch " + r.epoch + " it asked " + fmtNear(r.amount.toString()) + " NEAR and was capped at " + fmtNear(r.paid.toString()) + ".";
+  if(r.paid < r.amount) return "In epoch " + r.epoch + " it asked " + fmtNear(r.amount.toString()) + " NEAR and received " + fmtNear(r.paid.toString()) + " NEAR.";
   return "In epoch " + r.epoch + " it asked " + fmtNear(r.amount.toString()) + " NEAR and was paid in full.";
 }
 /* Behaviour profile from the agent's own reveal record: utilisation is the
@@ -1563,7 +1563,7 @@ function buildDrama(room, epochs){
       if(amount === 0n){
         items.push({epoch:e.epoch, text: esc(displayName(rv.account)) + " revealed 0 in epoch " + e.epoch + ". Public restraint."});
       } else if(paid < amount){
-        items.push({epoch:e.epoch, text: esc(displayName(rv.account)) + " asked " + fmtNear(rv.amount) + " NEAR in epoch " + e.epoch + ", capped at " + fmtNear(rv.paid) + " NEAR."});
+        items.push({epoch:e.epoch, text: esc(displayName(rv.account)) + " asked " + fmtNear(rv.amount) + " NEAR in epoch " + e.epoch + ", received " + fmtNear(rv.paid) + " NEAR."});
       }
       if(snapshot > 0n && paid * 4n >= snapshot){
         var pctShare = Math.round(ratioOf(paid, snapshot) * 100);
@@ -1577,11 +1577,16 @@ function buildDrama(room, epochs){
       leanSaid = true;
       items.push({epoch:e.epoch, text: "In epoch " + e.epoch + " the pool fell under 15 percent of its seed. The lean days begin: from here, every epoch is a negotiation with an emptying tank."});
     }
-    var totalReq = big(e.total_requested), totalPaid = big(e.total_paid);
-    if(totalReq > 0n && totalPaid > 0n){
-      var snap2 = (prevPool === null ? poolAfter + totalPaid : prevPool) + big(e.refill_moved);
-      if(totalReq > snap2 && totalPaid === snap2){
-        items.push({epoch:e.epoch, text: "Epoch " + e.epoch + " paid out pro rata. Requests totalled " + fmtNear(e.total_requested) + " NEAR against a pool snapshot of about " + fmtNear(snap2.toString()) + " NEAR, so the pool was shared out in full."});
+    var totalPaid = big(e.total_paid);
+    if(totalPaid > 0n){
+      /* Pro-rata is the contract's allocation step (the same rule
+         as the epoch table): it happened only if the cap-clipped
+         payables exceeded the payout budget. */
+      var capY2 = snapshot * big(room.cap_bps) / 10000n;
+      var payable2 = (e.reveals || []).reduce(function(sum, rv){ var a = big(rv.amount); return sum + (a < capY2 ? a : capY2); }, 0n);
+      var budget2 = room.regime === "paced" ? snapshot / big(Math.max(1, Number(room.season_epochs) - Number(e.epoch))) : snapshot;
+      if(payable2 > budget2){
+        items.push({epoch:e.epoch, text: "Epoch " + e.epoch + " paid out pro rata. Requests totalled " + fmtNear(e.total_requested) + " NEAR against a payout budget of " + fmtNear(budget2.toString()) + " NEAR, so the pool was shared out in full."});
       }
     }
     prevPool = poolAfter;
@@ -1613,17 +1618,19 @@ function replaySeries(room){
       series.push(rec);
       prev = big(rec.pool_after);
     } else {
-      var pa = (prev === null ? null : prev + big(room.refill_per_epoch));
+      /* Unloaded epoch: carry the last known pool forward flat.
+         Inventing a refill here would fabricate chain data; the
+         entry stays marked missing and its drama line says so. */
       series.push({epoch:i, total_requested:"0", total_paid:"0",
-        refill_moved: room.refill_per_epoch,
-        pool_after: pa === null ? "0" : pa.toString(), reveals:[], missing:true});
-      prev = pa;
+        refill_moved: "0",
+        pool_after: prev === null ? "0" : prev.toString(), reveals:[], missing:true});
     }
   }
   if(startPool === null) startPool = big(room.pool_balance) + big(room.refill_reserve);
   return { series: series, startPool: startPool };
 }
 function replayDramaLine(e){
+  if(e.missing) return "Epoch " + e.epoch + " was not loaded for this replay.";
   var reveals = e.reveals || [];
   if(!reveals.length){
     return "Epoch " + e.epoch + " settled empty. Nobody fed; only the refill moved.";
@@ -1634,7 +1641,7 @@ function replayDramaLine(e){
     if(amount === 0n){
       parts.push(esc(shortAcct(rv.account)) + " revealed 0. Public restraint.");
     } else if(paid < amount){
-      parts.push(esc(shortAcct(rv.account)) + " asked " + fmtNear(rv.amount) + ", capped at " + fmtNear(rv.paid) + ".");
+      parts.push(esc(shortAcct(rv.account)) + " asked " + fmtNear(rv.amount) + ", received " + fmtNear(rv.paid) + ".");
     } else {
       parts.push(esc(shortAcct(rv.account)) + " asked " + fmtNear(rv.amount) + " and was paid in full.");
     }
