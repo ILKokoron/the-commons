@@ -20,3 +20,9 @@ packages = ["the_commons_mcp"]
 
 [tool.setuptools.package-dir]
 the_commons_mcp = "mcp"
+
+# contracts.json is data the package reads at runtime (the shared
+# contract registry); without this it silently never reaches an
+# installed copy, which then runs on the built-in mirror alone.
+[tool.setuptools.package-data]
+the_commons_mcp = ["contracts.json"]
