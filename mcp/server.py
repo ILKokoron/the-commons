@@ -323,10 +323,15 @@ _AMOUNT_RE = re.compile(r"^[0-9]+(\.[0-9]+)?$")
 
 
 def to_yocto(amount):
-    """Strict amount parser for the tool boundary. Accepts exactly
-    two forms: a NEAR decimal string ("0.005", "12", "0.000000000000
-    000000000001" with at most 24 decimal places) or a non-negative
-    integer (already yocto). Everything else raises ValueError:
+    """Strict amount parser for the tool boundary. A string is
+    always a NEAR amount: "0.005", "1.0" and "12" all mean NEAR,
+    with or without a decimal point, at most 24 decimal places.
+    A whole-number string is NEAR, never yocto (an earlier version
+    read dot-less strings as raw yocto, so a seed of "1" funded a
+    room with 1 yocto). Raw yocto must be marked explicitly: the
+    "_yocto" suffix ("1500000000000000000000_yocto") or a
+    non-negative Python int (internal callers only). Everything
+    else raises ValueError:
     negative amounts (a leading "-" used to parse as a POSITIVE
     amount, because int("-0") is 0), signs, exponents ("1e-3"),
     floats (precision loss), empty or whitespace-padded strings
@@ -342,14 +347,23 @@ def to_yocto(amount):
         return amount
     if not isinstance(amount, str):
         raise ValueError(
-            f"amount must be a NEAR decimal string or yocto integer, "
+            f"amount must be a NEAR decimal string (whole numbers "
+            f"are NEAR too) or a \"<digits>_yocto\" string, "
             f"got {type(amount).__name__}: {amount!r}")
     s = amount.strip()
+    if s.endswith("_yocto"):
+        core = s[: -len("_yocto")]
+        if not core.isdigit():
+            raise ValueError(
+                f"invalid amount {amount!r}: the \"_yocto\" form "
+                "must be digits followed by \"_yocto\"")
+        return int(core)
     if not _AMOUNT_RE.match(s):
         raise ValueError(
             f"invalid amount {amount!r}: expected a NEAR decimal "
-            "string like \"0.005\" (no sign, no exponent) or an "
-            "integer yocto string")
+            "string like \"0.005\" or \"12\" (no sign, no "
+            "exponent), or raw yocto marked like "
+            "\"1500000000000000000000_yocto\"")
     if "." in s:
         whole, _, frac = s.partition(".")
         if len(frac) > 24:
@@ -357,7 +371,7 @@ def to_yocto(amount):
                 f"invalid amount {amount!r}: more than 24 decimal "
                 "places; yocto is the smallest unit")
         return int(whole) * YOCTO + int(frac.ljust(24, "0"))
-    return int(s)
+    return int(s) * YOCTO
 
 
 def near_str(yocto):
@@ -773,9 +787,13 @@ def commons_create_room(
     refill_floor: str = "0",
 ) -> dict:
     """Host action: open a new room (season). Amounts (stake, seed,
-    refill_per_epoch) are NEAR decimal strings like "0.005" or integer
-    yocto strings. Attaches exactly room_fee + seed, read from the
-    contract config. Returns the new room id and a read-back of it.
+    refill_per_epoch) are NEAR amounts: "0.005", "1.0" and "1" all
+    mean NEAR, with or without a decimal point; raw yocto only via
+    the "_yocto" suffix. Attaches exactly room_fee + seed, read
+    from the contract config. Returns the new room id and a
+    read-back of it, verified funded: the read-back must show
+    pool_balance + refill_reserve equal to the seed, or the result
+    is an error, not a silent success.
 
     On a contract whose get_config exposes gas_per_epoch (the
     current contract), create_room also escrows a Guarantee Fund:
@@ -900,6 +918,15 @@ def commons_create_room(
             res["ok"] = False
             res["verified"] = False
             res["error"] = "read-back mismatch: new room not found under host"
+        elif int(room["pool_balance"]) + int(room["refill_reserve"]) != seed_y:
+            res["ok"] = False
+            res["verified"] = False
+            res["error"] = (
+                "funding mismatch: the new room holds pool_balance "
+                f"{room['pool_balance']} + refill_reserve "
+                f"{room['refill_reserve']} yocto, but the seed was "
+                f"{seed_y} yocto ({near_str(seed_y)} NEAR); refusing "
+                "to report an under-funded room as a success")
         else:
             res["verified"] = True
     except Exception as e:
@@ -1057,7 +1084,8 @@ def commons_commit(
     NEAR) and the salt, so the caller can reveal later with explicit
     arguments even if that local state is lost. Refuses to send when
     less than COMMONS_COMMIT_MIN_MARGIN_SECS remains in the commit
-    phase. Amount is a NEAR decimal string or integer yocto."""
+    phase. Amount is a NEAR amount ("0.005", "1.0" and "1" all
+    mean NEAR); raw yocto only via the "_yocto" suffix."""
     try:
         info = view("current_epoch", {"room_id": room_id})
         room = view("get_room", {"room_id": room_id})
