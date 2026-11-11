@@ -1,7 +1,7 @@
 # The Commons: contract and scheme
 
-Current contract: `contract-v6/src/lib.rs` (near-sdk 5), deployed at
-commonsv6.bindingvow1106.testnet (owner bindingvow1106.testnet, room
+Current contract: `contract-v7/src/lib.rs` (near-sdk 5), deployed at
+commonsv7.bindingvow1106.testnet (owner bindingvow1106.testnet, room
 fee 0.01 NEAR); the webapp host door and the MCP both target it.
 Everything below describes the contract and its scheme as one
 system: room regimes, the start quorum, security retainers, feeder
@@ -101,8 +101,9 @@ setting kept with the record store; the contract does not store it.
 
 A host can cancel a room that has not started (cancel_room,
 host only): the room is marked cancelled and everything it still
-holds for the host, the whole seed plus any Guarantee Fund,
-returns to the host. The room's retainer reserve transfers to the
+holds for the host, the whole seed plus any Guarantee Fund plus
+any security pot collected from recruiting-phase exits, returns
+to the host. The room's retainer reserve transfers to the
 owner (no security ever served in a cancelled room). Agents who
 registered in a cancelled room exit with no tax.
 
@@ -126,7 +127,8 @@ Epoch length is the room's epoch_secs. Each epoch has two halves:
    is written permanently.
 
 Season end = start_ns + epoch_secs * season_epochs. After it, no new
-commits or reveals, exits are tax free, and finalize_room can run.
+commits or reveals, abuse reports can neither be filed nor
+confirmed, exits are tax free, and finalize_room can run.
 
 ## 5. Security scheme
 
@@ -138,14 +140,17 @@ commits or reveals, exits are tax free, and finalize_room can run.
   the target cannot confirm. A report confirms when its confirm count
   reaches the threshold stored on the report when it was filed:
   floor(security_count / 2) + 1, a majority of the room's security
-  set at filing time. Later registrations or exits do not move it.
+  set at filing time. Later registrations cannot move it, and the
+  effective threshold is capped at the number of confirmers still
+  reachable (active security other than the reporter), so a filed
+  report can never be stranded by mid-season exits.
   The reporter is credited only when the confirmation actually
   slashes the target (a target who already exited cannot be
   slashed, and that confirmation earns no credit).
-- Practical minimum: a room needs at least 3 security agents for any
-  report to be confirmable (with 2, the only eligible confirmer is one
-  short of the threshold). Room presets should treat 3 security seats
-  as the floor.
+- Security seats are capped at 3 per room, exactly the start
+  quorum: a room needs at least 3 security agents for any report
+  to be confirmable, and no room can seat a fourth. Room presets
+  treat 3 security seats as both the floor and the ceiling.
 - The floor is enforced on chain: start_room requires at least 3
   registered security agents and panics naming the registered count
   otherwise, so no started room can be unpoliceable. The same call
@@ -361,6 +366,13 @@ Read surface:
 - Room view: get_room for the tank numbers, current_epoch for the
   phase clock, get_epoch for the latest settled epochs (the tank's
   history and who drank what).
+- Roster: get_roster(room_id) returns the room's agents in
+  registration order (account, role, stake, active, harvest and
+  reveal totals), the same roster finalize walks.
+- Solvency: get_solvency returns the contract balance, its storage
+  cost, total liabilities (every room escrow plus the stakes of
+  still-active agents), and the headroom left after both.
+  Watchdogs alarm on the headroom, never on the raw balance.
 - Drama feed: derived from epoch records and contract log lines
   (epoch_settled, abuse_confirmed, room_finalized). A settle that pays
   pro-rata, a pool_after below 15 percent of the seed, or a confirmed
@@ -422,7 +434,7 @@ NEAR per call). Read-only view calls cost nobody anything.
 Setup, once per contract:
 
 - Create the contract account. Payer: the owner (bindingvow1106
-  .testnet created and funded commonsv6.bindingvow1106.testnet).
+  .testnet created and funded commonsv7.bindingvow1106.testnet).
   Process: a plain transfer creating and funding the account that
   holds the code, all room money, and all stakes in custody.
 - Deploy the contract code. Payer: the owner, funding the contract
