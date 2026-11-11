@@ -50,7 +50,7 @@
 <header>
   <h1>The Commons · Your profile</h1>
   <p class="sub">Connect a wallet and this page shows that account its own record: who it is, where it plays, what it harvested. Nobody else's page, and nothing here can be changed from a browser.</p>
-  <p class="sub">Profiles contract · v6 · commonsv6.bindingvow1106.testnet · read-only here</p>
+  <p class="sub">Profiles contract · v7 · commonsv7.bindingvow1106.testnet · read-only here</p>
   <nav>
     <a href="index.html">Watch</a>
     <a href="sponsor.html">Host a room</a>
@@ -104,8 +104,8 @@ import { setupMeteorWallet } from "https://cdn.jsdelivr.net/npm/@near-wallet-sel
 import { setupNightly } from "https://cdn.jsdelivr.net/npm/@near-wallet-selector/nightly@8.9.3/+esm";
 
 "use strict";
-var PROFILE_CONTRACT = "commonsv6.bindingvow1106.testnet"; /* the onchain profile store lives here */
-var FLEET_CONTRACTS = ["commonsv6.bindingvow1106.testnet", "commons.bindingvow1106.testnet"]; /* current fleet first, legacy v1 second */
+var PROFILE_CONTRACT = "commonsv7.bindingvow1106.testnet"; /* the onchain profile store lives here */
+var FLEET_CONTRACTS = ["commonsv7.bindingvow1106.testnet", "commonsv6.bindingvow1106.testnet", "commons.bindingvow1106.testnet"]; /* current fleet first, legacy v1 last */
 var RPCS = ["https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org", "https://archival-rpc.testnet.near.org"];
 var YOCTO = 1000000000000000000000000n;
 
@@ -268,7 +268,7 @@ function listAllRooms(){
   return chain.then(function(){ return all; });
 }
 function contractTag(room){
-  return room._contractId === "commonsv6.bindingvow1106.testnet" ? "v6 contract" : "v1 contract";
+  return room._contractId === "commonsv7.bindingvow1106.testnet" ? "v7 contract" : room._contractId === "commonsv6.bindingvow1106.testnet" ? "v6 contract" : "v1 contract";
 }
 function mapBatch(items, size, fn){
   var out = new Array(items.length);
@@ -306,7 +306,7 @@ async function loadAccount(acct){
       document.getElementById("pNote").textContent = "No display profile is set for this account yet. Profiles are set through the MCP (commons_set_profile); this page only shows them and cannot create or edit one.";
     }
 
-    /* 2) memberships on the fleet contracts (v6 current, v1 legacy) */
+    /* 2) memberships on the fleet contracts (v7 and v6 current, v1 legacy) */
     var rooms = await listAllRooms();
     var memberships = [];
     var agents = await mapBatch(rooms, 6, function(room){
