@@ -3,7 +3,7 @@
 
 Spawns the server over stdio with the caller's environment (set
 COMMONS_ACCOUNT_ID to choose who signs), calls one tool, prints the
-JSON result, and exits. Handy for sponsor actions, registrations,
+JSON result, and exits. Handy for host actions, registrations,
 tests, and for wiring other tools that prefer a subprocess interface.
 
 Usage:
