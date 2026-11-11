@@ -43,10 +43,12 @@ Configuration comes from the environment:
                        COMMONS_NEAR_CLI as the fix.
   COMMONS_COMMIT_MIN_MARGIN_SECS
                        commons_commit refuses to send when fewer than
-                       this many seconds remain in the commit phase
-                       (default 45), because the transaction would
-                       likely land in the reveal phase and be rejected
-                       on chain.
+                       the safety margin remains in the commit phase,
+                       because the transaction would likely land in
+                       the reveal phase and be rejected on chain. The
+                       default margin is a quarter of the commit
+                       phase, capped at 45 s and floored at 10 s; set
+                       this variable to pin a fixed margin instead.
 
 Signing happens locally: every write is a `near contract call-function`
 subprocess signed from the local CLI keychain for COMMONS_ACCOUNT_ID.
@@ -168,10 +170,28 @@ try:
         os.environ.get("COMMONS_COMMIT_MIN_MARGIN_SECS", "45"))
     if COMMIT_MIN_MARGIN_SECS < 0:
         raise ValueError("negative")
+    COMMIT_MARGIN_FROM_ENV = (
+        "COMMONS_COMMIT_MIN_MARGIN_SECS" in os.environ)
 except ValueError:
     print("COMMONS_COMMIT_MIN_MARGIN_SECS is malformed; "
           "falling back to 45", file=sys.stderr)
     COMMIT_MIN_MARGIN_SECS = 45
+    COMMIT_MARGIN_FROM_ENV = True
+
+
+def _margin_secs(half_secs):
+    """Effective phase safety margin (seconds) for a room whose
+    commit phase lasts half_secs. An explicit
+    COMMONS_COMMIT_MIN_MARGIN_SECS always wins. Otherwise the
+    margin scales with the phase: a quarter of the phase, capped
+    at 45 s and floored at 10 s, so short epochs stay playable
+    (a 120 s epoch has a 60 s commit phase, where a fixed 45 s
+    margin left only the first 15 s usable) while long epochs
+    keep the full 45 s of protection."""
+    if COMMIT_MARGIN_FROM_ENV:
+        return COMMIT_MIN_MARGIN_SECS
+    half = max(1, int(half_secs))
+    return min(half, max(10, min(45, half // 4)))
 
 
 def _resolve_near_cli():
@@ -1407,8 +1427,8 @@ def commons_commit(
     paid commitment; the result also returns the amount (yocto and
     NEAR) and the salt, so the caller can reveal later with explicit
     arguments even if that local state is lost. Refuses to send when
-    less than COMMONS_COMMIT_MIN_MARGIN_SECS remains in the commit
-    phase. Amount is a NEAR amount ("0.005", "1.0" and "1" all
+    less than the phase safety margin remains in the commit phase
+    (see COMMONS_COMMIT_MIN_MARGIN_SECS). Amount is a NEAR amount ("0.005", "1.0" and "1" all
     mean NEAR); raw yocto only via the "_yocto" suffix."""
     try:
         info = view("current_epoch", {"room_id": room_id})
@@ -1422,11 +1442,12 @@ def commons_commit(
                        "not commit phase")
         epoch = int(info["epoch"])
         half = max(1, int(room["epoch_secs"]) // 2)
+        margin = _margin_secs(half)
         remaining = half - int(info.get("seconds_into_epoch", 0))
-        if remaining < COMMIT_MIN_MARGIN_SECS:
+        if remaining < margin:
             return err(f"only {remaining}s left in the commit phase of "
                        f"epoch {epoch} (safety margin "
-                       f"{COMMIT_MIN_MARGIN_SECS}s); a commit sent now "
+                       f"{margin}s); a commit sent now "
                        "would likely land in the reveal phase and be "
                        "rejected on chain, burning gas. Wait for the "
                        f"commit phase of epoch {epoch + 1}.")
@@ -1519,10 +1540,10 @@ def commons_commit(
                        "was being prepared; not broadcasting. Retry "
                        "in the next commit phase.")
         remaining = half - int(fresh.get("seconds_into_epoch", 0))
-        if remaining < COMMIT_MIN_MARGIN_SECS:
+        if remaining < margin:
             return err(f"only {remaining}s left in the commit phase "
                        f"of epoch {epoch} at broadcast time (safety "
-                       f"margin {COMMIT_MIN_MARGIN_SECS}s); not "
+                       f"margin {margin}s); not "
                        "broadcasting, the commit would likely land "
                        "in the reveal phase and be rejected on chain.")
     except Exception as e:
@@ -1637,9 +1658,10 @@ def commons_reveal(
         room = view("get_room", {"room_id": room_id})
         remaining = int(room["epoch_secs"]) \
             - int(info.get("seconds_into_epoch", 0))
-        if remaining < COMMIT_MIN_MARGIN_SECS:
+        margin = _margin_secs(max(1, int(room["epoch_secs"]) // 2))
+        if remaining < margin:
             return err(f"only {remaining}s left in epoch {epoch} "
-                       f"(safety margin {COMMIT_MIN_MARGIN_SECS}s); "
+                       f"(safety margin {margin}s); "
                        "a reveal sent now would likely land after "
                        "the epoch ends and be rejected on chain.")
     except Exception as e:
