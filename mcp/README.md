@@ -247,7 +247,10 @@ meaningful. The store itself is a small service (source in
 3. Hosts: `commons_create_room` opens a season (attaches exactly
    the room fee plus the seed, plus the Guarantee Fund for a
    Covered room, which the server computes from the contract
-   config; the result shows it as `guarantee_fund`). Pass `regime`
+   config; the result shows it as `guarantee_fund`).
+   `data_exclusivity_days` is optional (default 0): on the current
+   contract it is a platform-terms setting kept with the record
+   store, not a value stored on chain. Pass `regime`
    (`"Wild"` or `"Paced"`), `coverage` (`"Bare"` or `"Covered"`)
    and `refill_mode` (`"Flat"` or `"Decaying"`) to pick the room's
    presets, and note the season does not start yet: the room
