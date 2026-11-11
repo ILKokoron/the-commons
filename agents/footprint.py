@@ -153,6 +153,13 @@ class Footprint:
             pass
         return out
 
+    def _index_get(self, key):
+        try:
+            with open(INDEX_PATH) as f:
+                return json.load(f).get(key)
+        except Exception:
+            return None
+
     def _save_index(self, key, cid):
         idx = {}
         try:
@@ -183,6 +190,9 @@ class Footprint:
                       f"only (no store credentials)")
             return True
         url, token = cfg
+        if self._index_get(
+                f"{self.room}/{epoch}/{self.account}") == cid:
+            return True  # this exact bundle is already in the store
         try:
             req = urllib.request.Request(
                 url + "/api/records",
@@ -243,11 +253,20 @@ class Footprint:
             self._last_seen = current
             if new_epoch_seen and self._pending:
                 still = []
-                for ep in self._pending:
-                    if not self._bundle_epoch(ep):
-                        still.append(ep)
+                queue = list(self._pending)
+                while queue:
+                    ep = queue.pop(0)
+                    if self._bundle_epoch(ep):
+                        continue
+                    # Fail fast: a dead store must not multiply
+                    # into one timeout per queued epoch per pass.
+                    still.append(ep)
+                    still.extend(queue)
+                    break
                 self._pending = still
-            while self._next_bundle < current:
+            attempts = 0
+            while self._next_bundle < current and attempts < 8:
+                attempts += 1
                 ep = self._next_bundle
                 # Defer the freshest finished epoch until this
                 # account's settle attempt for it is on record (the
