@@ -568,7 +568,7 @@ async def main():
                             triple = triples.get(epoch)
                             if triple and triple.get("salt"):
                                 rargs.update({
-                                    "amount": triple["amount"],
+                                    "amount_yocto": triple["amount"],
                                     "reasoning_hash":
                                         triple["reasoning_hash"],
                                     "salt": triple["salt"],
