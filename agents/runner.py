@@ -245,6 +245,8 @@ async def main():
                     _line = _line.strip()
                     if "=" in _line and not _line.startswith("#"):
                         _k, _, _v = _line.partition("=")
+                        _k = _k.strip()
+                        _v = _v.strip()
                         if _k in ("COMMONS_STORE_URL",
                                   "COMMONS_STORE_TOKEN") \
                                 and _k not in env:
@@ -255,6 +257,7 @@ async def main():
         command=sys.executable, args=[SERVER], env=env)
 
     committed, revealed, triples = load_state(args.account, args.room)
+    settle_attempts = {}
     started = time.time()
     fp = Footprint(args.account, args.room, on_log=log) \
         if Footprint is not None else None
@@ -432,6 +435,15 @@ async def main():
                                               "epoch": e})
                             if chk.get("ok"):
                                 continue  # settled already; never pay
+                            if "is not settled yet" not in \
+                                    str(chk.get("error", "")):
+                                log(f"epoch {e}: get_epoch read "
+                                    f"failed ({str(chk.get('error', ''))[:100]}); "
+                                    "not settling on a failed read")
+                                break
+                            if time.time() - settle_attempts.get(e, 0) < 30:
+                                break
+                            settle_attempts[e] = time.time()
                             res = await game_call(
                                 session, "commons_settle",
                                 {"room_id": args.room, "epoch": e},
