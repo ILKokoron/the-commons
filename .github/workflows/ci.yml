@@ -31,3 +31,5 @@ jobs:
         run: python -c "import server; print('tools module ok')"
       - name: Amount parser unit tests
         run: python mcp/test_amounts.py
+      - name: LLM amount parser unit tests
+        run: python agents/test_llm_amount.py
