@@ -29,3 +29,5 @@ jobs:
       - name: Import the MCP server module
         working-directory: mcp
         run: python -c "import server; print('tools module ok')"
+      - name: Amount parser unit tests
+        run: python mcp/test_amounts.py
