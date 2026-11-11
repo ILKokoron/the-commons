@@ -664,11 +664,15 @@ def commons_status() -> dict:
         except Exception as e:
             out["balance_error"] = str(e)
         registrations = []
+        reg_errors = []
         for rid in range(int(out["config"]["rooms_created"])):
             try:
                 agent = view("get_agent", {"room_id": rid, "account": ACCOUNT})
-            except Exception:
+            except Exception as e:
+                # A failed read is not "not registered": surface
+                # it, or a room silently vanishes from this list.
                 agent = None
+                reg_errors.append({"room_id": rid, "error": str(e)})
             if agent:
                 room = view("get_room", {"room_id": rid})
                 registrations.append({
@@ -680,6 +684,8 @@ def commons_status() -> dict:
                     "total_withdrawn_near": near_str(int(agent["total_withdrawn"])),
                 })
         out["registrations"] = registrations
+        if reg_errors:
+            out["registration_read_errors"] = reg_errors
     return out
 
 
@@ -1040,10 +1046,14 @@ def _maybe_auto_start(res, room_id):
             return
         feeders = int(room.get("feeders_count", 0))
         security = int(room.get("security_count", 0))
+        # The 2-feeder start rule exists only from v5; v2-v4
+        # start on security alone, and the text must say so.
+        need_feeders = 2 if _ver >= 5 else 0
         res["room_state"] = (
             f"recruiting: {feeders} feeder(s), {security} security "
-            f"(starts at 2 feeders + 3 security)")
-        if feeders < 2 or security < 3:
+            + (f"(starts at {need_feeders} feeder(s) + 3 security)"
+               if need_feeders else "(starts at 3 security)"))
+        if feeders < need_feeders or security < 3:
             return
         permissionless = _v45
         if not permissionless and ACCOUNT != room.get("sponsor"):
