@@ -324,17 +324,35 @@ function finished(room){
   return Number(room.next_epoch_to_settle) >= Number(room.season_epochs) || Date.now() >= seasonEnd(room).getTime();
 }
 function phaseInfo(room){
+  /* Chain first: when a current_epoch read is attached to the
+     room, the round and the phase come from the chain, and only
+     the seconds countdown interpolates locally from the read's
+     timestamp. The clock-only estimate below is the fallback
+     for when the read has not landed yet; a skewed local clock
+     must not be able to invent a round. */
+  var cur = room._cur;
+  if(cur && typeof cur.epoch === "number" && (cur.phase === "commit" || cur.phase === "reveal") && !cur.season_over){
+    var epochSecs = Number(room.epoch_secs);
+    var into = Number(cur.seconds_into_epoch || 0) + (Date.now() - (room._curAt || Date.now())) / 1000;
+    if(into < epochSecs){
+      var half = epochSecs / 2;
+      var inCommit = cur.phase === "commit";
+      var left = Math.max(0, Math.ceil((inCommit ? half : epochSecs) - into));
+      var mm = Math.floor(left / 60), ss = String(left % 60).padStart(2, "0");
+      return { text: "Round " + (cur.epoch + 1) + " of " + room.season_epochs + " · " + (inCommit ? "Commit phase" : "Reveal phase") + " · " + mm + ":" + ss + " left", frac: into / epochSecs };
+    }
+  }
   var startMs = Number(big(room.start_ns) / 1000000n);
   var epochMs = Number(room.epoch_secs) * 1000;
   var el = Date.now() - startMs;
   if(el < 0) return { text: "The season has not started yet.", frac: 0 };
   var epoch = Math.floor(el / epochMs);
-  var into = el - epoch * epochMs;
-  var half = epochMs / 2;
-  var phase = into < half ? "Commit phase" : "Reveal phase";
-  var left = Math.ceil(((into < half ? half : epochMs) - into) / 1000);
-  var mm = Math.floor(left / 60), ss = String(left % 60).padStart(2, "0");
-  return { text: "Round " + epoch + " of " + room.season_epochs + " · " + phase + " · " + mm + ":" + ss + " left", frac: into / epochMs };
+  var into2 = el - epoch * epochMs;
+  var half2 = epochMs / 2;
+  var phase = into2 < half2 ? "Commit phase" : "Reveal phase";
+  var left2 = Math.ceil(((into2 < half2 ? half2 : epochMs) - into2) / 1000);
+  var mm2 = Math.floor(left2 / 60), ss2 = String(left2 % 60).padStart(2, "0");
+  return { text: "Round " + (epoch + 1) + " of " + room.season_epochs + " · " + phase + " · " + mm2 + ":" + ss2 + " left", frac: into2 / epochMs };
 }
 
 function countUp(el, target, format){
@@ -576,6 +594,9 @@ function refresh(){
     if(!r) { setText("lp-live-tag", "Chain read failed · retrying"); return; }
     var first = !room;
     room = r;
+    rpc("current_epoch", { room_id: ROOM_ID }).then(function(c){
+      if(c && room === r){ r._cur = c; r._curAt = Date.now(); }
+    });
     paint();
     if(first){
       var last = Number(r.next_epoch_to_settle) - 1;
