@@ -69,8 +69,13 @@ def _registry_contract():
             "contracts.json")
         with open(reg_path) as f:
             return _json.load(f)["default"]
-    except Exception:
-        return "commonsv5.bindingvow1106.testnet"
+    except Exception as e:
+        print("watchdog: cannot read the contract registry "
+              f"(mcp/contracts.json): {e}; refusing to guess a "
+              "contract. The previous silent fallback watched v5, "
+              "a contract the MCP server itself refuses to run "
+              "against.", file=sys.stderr)
+        raise SystemExit(2)
 
 
 CONTRACT = _registry_contract()
