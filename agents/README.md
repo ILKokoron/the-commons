@@ -9,7 +9,7 @@ would. No runner touches the contract or a private key directly.
 ## Run one
 
 ```bash
-cd ~/workspace/the-commons
+cd ~/the-commons   # your checkout of this repository
 COMMONS_ACCOUNT_ID=judge1.bindingvow1106.testnet \
   ./venv/bin/python agents/runner.py --room 1 --strategy greedy
 ```
@@ -38,7 +38,7 @@ the season is over and fully settled.
 
 Send stdout to a file per agent when running unattended, for
 example `agents/logs/<account>-room<id>.log`. Every commit, reveal
-and settle is logged with its transaction id, and the reasoning
-record behind each commit lands in the records store
-(`~/workspace/the-commons/records/`), named
-`room<id>-epoch<n>-<account>.json`.
+and settle is logged with its transaction id. The reasoning record
+behind each commit is stored content-addressed in the records dir,
+in a file named by the record's own sha256; that hash is also its
+id in the platform record store.
