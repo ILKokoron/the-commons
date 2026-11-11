@@ -104,7 +104,14 @@ def fetch_store_record(store_url, token, content_id, attempts=3):
             f"{store_url}/api/records/{content_id}",
             headers={"Authorization": f"Bearer {token}"})
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            # Never follow a redirect on a request carrying the
+            # store token (same rule as the MCP and footprint).
+            class _NoRedirect(urllib.request.HTTPRedirectHandler):
+                def redirect_request(self, req, fp, code, msg,
+                                     headers, newurl):
+                    return None
+            opener = urllib.request.build_opener(_NoRedirect)
+            with opener.open(req, timeout=30) as resp:
                 return resp.read(), None
         except urllib.error.HTTPError as e:
             return None, f"store returned HTTP {e.code}"
@@ -127,9 +134,9 @@ def _records_from_bundle(raw, room_id):
     if isinstance(obj, dict) and isinstance(obj.get("records"), list):
         return [r for r in obj["records"]
                 if isinstance(r, dict)
-                and int(r.get("room_id", -1)) == room_id]
+                and _room_id_of(r) == room_id]
     if isinstance(obj, dict):
-        return [obj] if int(obj.get("room_id", -1)) == room_id else []
+        return [obj] if _room_id_of(obj) == room_id else []
     out = []
     for line in text.splitlines():
         line = line.strip()
@@ -140,9 +147,18 @@ def _records_from_bundle(raw, room_id):
         except Exception:
             continue
         if isinstance(rec, dict) \
-                and int(rec.get("room_id", -1)) == room_id:
+                and _room_id_of(rec) == room_id:
             out.append(rec)
     return out
+
+
+def _room_id_of(rec):
+    """A record's room_id as an int, or -1 when it is missing or
+    not numeric: one malformed record must not fail the export."""
+    try:
+        return int(rec.get("room_id", -1))
+    except Exception:
+        return -1
 
 
 def gather_footprint(room_id, footprint_dir, store_url, store_token):
@@ -170,7 +186,7 @@ def gather_footprint(room_id, footprint_dir, store_url, store_token):
                 rec = json.loads(line)
             except Exception:
                 continue
-            if int(rec.get("room_id", -1)) != room_id:
+            if _room_id_of(rec) != room_id:
                 continue
             records.append(rec)
             covered.add((rec.get("agent"), rec.get("epoch")))
@@ -301,7 +317,7 @@ def main() -> int:
         raw = path.read_bytes()
         try:
             rec = json.loads(raw.decode())
-            if int(rec.get("room_id", -1)) != room_id:
+            if _room_id_of(rec) != room_id:
                 continue
             key = (int(rec["epoch"]), rec["agent"])
         except Exception:
@@ -324,6 +340,12 @@ def main() -> int:
             continue
         total_paid_epochs += int(ep["total_paid"])
         pool_after_near = yocto_to_near(ep["pool_after"])
+        # The per-feeder cap for this epoch, the contract's way:
+        # cap_bps of the settlement snapshot. A row is "capped"
+        # only when the cap itself clipped the request; paid <
+        # requested also happens under pro-rata and is not a cap.
+        snapshot_yocto = int(ep["pool_after"]) + int(ep["total_paid"])
+        cap_yocto = snapshot_yocto * int(room["cap_bps"]) // 10000
         for reveal in ep["reveals"]:
             reveals_seen += 1
             agent = reveal["account"]
@@ -410,7 +432,7 @@ def main() -> int:
                 "intended_amount_near": yocto_to_near(rec["intended_amount"]),
                 "requested_near": yocto_to_near(requested),
                 "paid_near": yocto_to_near(paid),
-                "capped": requested > paid,
+                "capped": requested > cap_yocto,
                 "pool_after_near": pool_after_near,
                 "reasoning_hash": reveal["reasoning_hash"],
                 "hash_verified": True,
@@ -422,7 +444,7 @@ def main() -> int:
             acc["epochs"] += 1
             acc["req"] += requested
             acc["paid"] += paid
-            acc["capped"] += 1 if requested > paid else 0
+            acc["capped"] += 1 if requested > cap_yocto else 0
 
     # Local records that never matched a reveal: written at commit time but
     # the commit (or the reveal) never landed on chain.
@@ -445,8 +467,8 @@ def main() -> int:
             "intended_amount_near": yocto_to_near(rec["intended_amount"]),
             "record_sha256": entry["sha256"],
             "hash_verified": False,
-            "reason": "record exists in store but no matching onchain reveal "
-                      "(commit never landed)",
+            "reason": "record exists locally but no matching onchain "
+                      "reveal (commit never landed)",
         })
 
     certified.sort(key=lambda r: (r["epoch"], r["agent"]))
