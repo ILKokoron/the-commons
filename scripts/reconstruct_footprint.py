@@ -19,9 +19,10 @@ footprint schema (same fields agents/footprint.py writes):
   [HH:MM:SS] settle epoch N not done by me: <error>
       -> settle, failed, error
 
-Log timestamps are [HH:MM:SS] UTC with no date; the room 2 logs are
-all from 2026-11-08, so the date is a parameter (default 2026-11-08)
-and ts is reconstructed as <date>T<HH:MM:SS>Z. The agent for a file
+Log timestamps are [HH:MM:SS] in the fleet host's local time
+(Asia/Jakarta, override with COMMONS_LOG_TZ) with no date; the
+room 2 logs are all from 2026-11-08, so the date is a parameter
+(default 2026-11-08) and ts is reconstructed in UTC. The agent for a file
 comes from the fleet table in agents/fleet.py (log file name to
 account), with a filename-derived fallback.
 
@@ -32,8 +33,11 @@ Usage:
 
 import argparse
 import json
+import os
 import re
 import sys
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from collections import Counter
 from pathlib import Path
 
@@ -41,6 +45,16 @@ BASE = Path(__file__).resolve().parent.parent
 DEFAULT_LOGS = BASE / "agents" / "logs"
 DEFAULT_OUT_DIR = BASE / "exports"
 DEFAULT_DATE = "2026-11-08"
+
+FLEET_TZ = os.environ.get("COMMONS_LOG_TZ", "Asia/Jakarta")
+
+
+def _ts_utc(date, hhmmss):
+    """A fleet log time (local to the fleet host) as a UTC stamp."""
+    dt = datetime.strptime(f"{date} {hhmmss}", "%Y-%m-%d %H:%M:%S")
+    dt = dt.replace(tzinfo=ZoneInfo(FLEET_TZ))
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 LINE_RE = re.compile(r"^\[(\d{2}:\d{2}:\d{2})\] (.*)$")
 COMMIT_OK = re.compile(r"^epoch (\d+): committed amount=\S+ tx=(\S+)")
@@ -115,7 +129,7 @@ def parse_file(path, account, room_id, date, lo, hi, out):
         if epoch < lo or epoch > hi:
             continue
         out.append({
-            "ts": f"{date}T{hhmmss}Z",
+            "ts": _ts_utc(date, hhmmss),
             "agent": account,
             "room_id": room_id,
             "epoch": epoch,
