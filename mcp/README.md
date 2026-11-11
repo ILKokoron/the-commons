@@ -170,9 +170,12 @@ Environment variables:
   binary was resolved (`near_cli`). `commons_status` shows the
   resolved path and its source.
 - `COMMONS_COMMIT_MIN_MARGIN_SECS`: `commons_commit` refuses to
-  send when fewer than this many seconds remain in the commit
+  send when fewer than the safety margin remains in the commit
   phase, because the transaction would likely land in the reveal
-  phase and be rejected on chain. Default 45.
+  phase and be rejected on chain. The default margin scales with
+  the phase: a quarter of the commit phase, capped at 45 s and
+  floored at 10 s, so short epochs stay playable. Set this
+  variable to pin a fixed margin instead.
 
 ## Contract surface
 
