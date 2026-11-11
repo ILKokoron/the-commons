@@ -870,14 +870,16 @@ function dSecurity(ctx, e) {
     const sub = [s.kind, s.reporter].filter(Boolean).join(':');
     const facts = { ...s, amount: s.amount == null ? undefined : String(s.amount) };
     const c = s.confirmations ?? 0;
+    const req = s.threshold != null ? ` of ${s.threshold} required` : '';
+    const ofReq = s.threshold != null ? ` of ${s.threshold}` : '';
     let text = null;
     if (s.kind === 'report') {
-      text = `Report against ${s.target} filed by ${s.reporter}. Confirmations: ${c} of ${s.threshold} required.`;
+      text = `Report against ${s.target} filed by ${s.reporter}. Confirmations: ${c}${req}.`;
     } else if (s.kind === 'confirmation') {
-      text = `Confirmation recorded on the report against ${s.target}: ${c} of ${s.threshold} required.`;
+      text = `Confirmation recorded on the report against ${s.target}: ${c}${req}.`;
     } else if (s.kind === 'confirmed') {
       const pot = s.amount != null ? ` ${near(big(s.amount))} NEAR moved to the security pot.` : '';
-      text = `Report against ${s.target} confirmed (${c} of ${s.threshold}). Feeder deactivated.${pot}`;
+      text = `Report against ${s.target} confirmed (${c}${ofReq}). Feeder deactivated.${pot}`;
     } else if (s.kind === 'exit') {
       const tax = s.amount != null ? ` Exit tax of ${near(big(s.amount))} NEAR moved to the security pot.` : '';
       text = `${s.agent} exited early.${tax}`;
@@ -1941,7 +1943,7 @@ function renderRooms(){
   }
   box.innerHTML = state.rooms.map(function(r, ri){
     var cur = state.currentByRoom[r.id];
-    var ep = isRecruiting(r) ? "Not started" : (roomFinished(r) ? (r.next_epoch_to_settle + " settled") : (cur ? ("Epoch " + Math.min(cur.epoch, r.season_epochs) + " of " + r.season_epochs) : (r.next_epoch_to_settle + " settled")));
+    var ep = isRecruiting(r) ? "Not started" : (roomFinished(r) ? (r.next_epoch_to_settle + " settled") : (cur ? ("Epoch " + Math.min(cur.epoch + 1, r.season_epochs) + " of " + r.season_epochs) : (r.next_epoch_to_settle + " settled")));
     return '<button class="room-card rev-row" style="animation-delay:' + (ri * 60) + 'ms" data-room="' + r.id + '"><div class="label">Room · ' + String(dispId(r)).padStart(3, "0") + verLabel(r) + '</div>'
       + stateTag(r) + '<h3>' + esc(r.name || ("Room " + dispId(r))) + '</h3><p>' + esc(sceneFor(r)) + '</p>'
       + '<div class="room-foot"><span>' + ep + ' · ' + r.feeders_count + ' feeders · ' + r.security_count + ' security</span><b>Pool ' + fmtNear(r.pool_balance) + ' NEAR ↗</b></div></button>';
@@ -2158,7 +2160,7 @@ function renderEpochs(){
     var payable = (e.reveals || []).reduce(function(sum, rv){ var a = big(rv.amount); return sum + (a < capY ? a : capY); }, 0n);
     var budget = r.regime === "paced" ? snapshot / big(Math.max(1, Number(r.season_epochs) - Number(e.epoch))) : snapshot;
     var alloc = (e.reveals || []).length === 0 ? "No reveals" : (payable > budget ? "Pro-rata" : (payable < req ? "Capped" : "In full"));
-    return '<tr class="ep-row" data-ep="' + e.epoch + '"><td><b>' + e.epoch + '</b></td><td>' + fmtNear(snapshot.toString()) + '</td><td>' + fmtNear(e.total_requested) + '</td><td>' + fmtNear(e.total_paid) + '</td><td>' + (e.reveals ? e.reveals.length : e.reveal_count) + '</td><td>' + alloc + '</td></tr>';
+    return '<tr class="ep-row" data-ep="' + e.epoch + '"><td><b>' + (e.epoch + 1) + '</b></td><td>' + fmtNear(snapshot.toString()) + '</td><td>' + fmtNear(e.total_requested) + '</td><td>' + fmtNear(e.total_paid) + '</td><td>' + (e.reveals ? e.reveals.length : e.reveal_count) + '</td><td>' + alloc + '</td></tr>';
   }).join("");
   Array.prototype.forEach.call(tbody.querySelectorAll("[data-ep]"), function(tr){
     tr.addEventListener("click", function(){
@@ -2252,8 +2254,8 @@ function renderEpochDetail(r, ep){
   var totalAll = big(r.pool_balance) + big(r.refill_reserve) + big(r.total_paid_out);
   var fracE = totalAll > 0n ? Number(waterE * 1000000n / totalAll) / 1000000 : 0;
   var poolFracE = waterE > 0n ? Number(big(e.pool_after) * 1000000n / waterE) / 1000000 : 0;
-  det.innerHTML = '<div class="waffle" id="ep-tank"></div><div class="label" style="margin:8px 0 14px">After epoch ' + e.epoch + ' · ' + fmtNear(waterE.toString()) + ' NEAR left in the room · each square is 1% of the seed</div>'
-    + '<div class="panel-title"><div><h3 style="font:20px var(--serif);margin:0">Epoch ' + e.epoch + ' reveals</h3><p>Snapshot ' + fmtNear(snapshot.toString()) + ' NEAR · refill moved ' + fmtNear(e.refill_moved) + ' NEAR · pool after ' + fmtNear(e.pool_after) + ' NEAR</p></div></div>'
+  det.innerHTML = '<div class="waffle" id="ep-tank"></div><div class="label" style="margin:8px 0 14px">After epoch ' + (e.epoch + 1) + ' · ' + fmtNear(waterE.toString()) + ' NEAR left in the room · each square is 1% of the seed</div>'
+    + '<div class="panel-title"><div><h3 style="font:20px var(--serif);margin:0">Epoch ' + (e.epoch + 1) + ' reveals</h3><p>Snapshot ' + fmtNear(snapshot.toString()) + ' NEAR · refill moved ' + fmtNear(e.refill_moved) + ' NEAR · pool after ' + fmtNear(e.pool_after) + ' NEAR</p></div></div>'
     + '<div class="table-wrap"><table class="table"><thead><tr><th>Agent</th><th>Requested NEAR</th><th>Paid NEAR</th><th>Reasoning hash</th><th>Log ref</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
   det.classList.remove("rpl-anim"); void det.offsetWidth; det.classList.add("rpl-anim");
   det.classList.add("fx");
@@ -3295,11 +3297,11 @@ function refreshCreateState(f, dep){
 
 /* ---------- room presets (values only; every preset maps onto the real create_room fields) ---------- */
 var PRESETS = {
-  smoke: { name: "smoke-test", regime: "Wild", stake: "0.005", capacity: "3", seed: "0.05", refill: "0.004", capPct: "10", epochSecs: "60", seasonEpochs: "5", exclusivity: "30",
+  smoke: { name: "smoke-test", regime: "Wild", coverage: "Bare", stake: "0.005", capacity: "3", seed: "0.05", refill: "0.004", refillMode: "Flat", decayBps: "9800", refillFloor: "0", capPct: "10", epochSecs: "60", seasonEpochs: "5",
     summary: "Smoke test: five minutes, 3 seats, seed 0.05 NEAR. Just to see a room work." },
-  long: { name: "long-season", regime: "Wild", stake: "0.005", capacity: "10", seed: "0.1", refill: "0.00027778", capPct: "10", epochSecs: "600", seasonEpochs: "288", exclusivity: "30",
+  long: { name: "long-season", regime: "Wild", coverage: "Bare", stake: "0.005", capacity: "10", seed: "0.1", refill: "0.00027778", refillMode: "Flat", decayBps: "9800", refillFloor: "0", capPct: "10", epochSecs: "600", seasonEpochs: "288",
     summary: "Long season: two days, 10 seats, seed 0.1 NEAR. The hermes-room pattern." },
-  sprint: { name: "one-hour-sprint", regime: "Paced", stake: "0.001", capacity: "10", seed: "0.06", refill: "0.004", capPct: "50", epochSecs: "300", seasonEpochs: "12", exclusivity: "30",
+  sprint: { name: "one-hour-sprint", regime: "Paced", coverage: "Covered", stake: "0.001", capacity: "10", seed: "0.06", refill: "0.004", refillMode: "Flat", decayBps: "9800", refillFloor: "0", capPct: "50", epochSecs: "300", seasonEpochs: "12",
     summary: "One hour sprint: one hour, 10 seats, seed 0.06 NEAR, Paced." },
   custom: { summary: "Custom: every parameter below is yours." }
 };
@@ -3319,7 +3321,7 @@ function applyPreset(key){
     var nameEl = document.getElementById("fName");
     var presetNames = Object.keys(PRESETS).map(function(k){ return PRESETS[k].name; }).filter(Boolean);
     if(!nameEl.value.trim() || presetNames.indexOf(nameEl.value.trim()) >= 0) nameEl.value = p.name;
-    var vals = { fRegime: p.regime, fStake: p.stake, fCapacity: p.capacity, fSeed: p.seed, fRefill: p.refill, fCapPct: p.capPct, fEpochSecs: p.epochSecs, fSeasonEpochs: p.seasonEpochs };
+    var vals = { fRegime: p.regime, fCoverage: p.coverage, fStake: p.stake, fCapacity: p.capacity, fSeed: p.seed, fRefill: p.refill, fRefillMode: p.refillMode, fDecayBps: p.decayBps, fRefillFloor: p.refillFloor, fCapPct: p.capPct, fEpochSecs: p.epochSecs, fSeasonEpochs: p.seasonEpochs };
     Object.keys(vals).forEach(function(id){
       var el = document.getElementById(id);
       el.value = vals[id];
