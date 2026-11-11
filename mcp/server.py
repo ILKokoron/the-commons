@@ -422,6 +422,21 @@ def to_yocto(amount):
                 f"invalid amount {amount!r}: more than 24 decimal "
                 "places; yocto is the smallest unit")
         return int(whole) * YOCTO + int(frac.ljust(24, "0"))
+    if len(s) >= 20:
+        # A dot-less string of 20+ digits is a raw yocto count in
+        # every realistic case (1 yocto short of 0.0001 NEAR is 20
+        # digits). Read as NEAR it would be scaled by 1e24 and
+        # overflow on chain, which is exactly how pre-upgrade
+        # callers sending yocto strings broke after the parser
+        # change (feeder feedback, 2026-11-11). Refuse and name
+        # the explicit forms instead of guessing.
+        raise ValueError(
+            f"ambiguous amount {amount!r}: a dot-less string of "
+            f"{len(s)} digits reads as raw yocto, not NEAR. Every "
+            "string here is a NEAR amount; send raw yocto "
+            "explicitly with the \"_yocto\" suffix (for example "
+            "\"500500000000000000000000_yocto\") or the tool's "
+            "amount_yocto parameter where one exists.")
     return int(s) * YOCTO
 
 
@@ -491,6 +506,66 @@ GAS_BY_METHOD = {"finalize_room": "300 TeraGas",
                  "settle_epoch": "300 TeraGas"}
 
 
+_GAS_PRICE_CACHE = {"ts": 0, "value": 0}
+
+
+def _gas_price_yocto():
+    """Network gas price in yocto per gas unit, with a 25% safety
+    buffer, cached for a minute. The CLI gates a call on deposit +
+    prepaid_gas x gas_price (the observed testnet price sits near
+    1.03e9, so 30 TeraGas holds about 0.031 NEAR). When the price
+    cannot be read, fall back to 1.1e9 so estimates stay
+    conservative."""
+    now = time.time()
+    if now - _GAS_PRICE_CACHE["ts"] < 60 and _GAS_PRICE_CACHE["value"]:
+        return _GAS_PRICE_CACHE["value"]
+    value = 1_100_000_000
+    try:
+        live = int(_rpc("gas_price", [None])["gas_price"])
+        if live > 0:
+            value = min(live * 5 // 4, 3_000_000_000)
+    except Exception:
+        pass
+    _GAS_PRICE_CACHE.update({"ts": now, "value": value})
+    return value
+
+
+def _preflight(fn, deposit_yocto):
+    """Balance gate run before any signed call (host feedback,
+    2026-11-11: a create whose seed fit the balance still failed
+    because deposit + prepaid-gas hold did not, and the refusal
+    surfaced only as "no transaction id"). Returns an error dict
+    naming the shortfall, or None to proceed. When the balance
+    cannot be read, proceed and let the CLI speak."""
+    try:
+        av = account_view(ACCOUNT)
+        amount = int(av["amount"])
+        storage = int(av.get("storage_usage") or 0)
+    except Exception:
+        return None
+    spendable = max(0, amount - storage * 10 ** 19)
+    teragas = int(GAS_BY_METHOD.get(fn, "30 TeraGas").split()[0])
+    gas_hold = teragas * 10 ** 12 * _gas_price_yocto()
+    required = int(deposit_yocto) + gas_hold
+    if spendable >= required:
+        return None
+    return {
+        "ok": False, "verified": False, "preflight": True,
+        "error": (f"pre-flight: {fn} needs about "
+                  f"{near_str(required)} NEAR (deposit "
+                  f"{near_str(int(deposit_yocto))} + prepaid gas "
+                  f"hold ~{near_str(gas_hold)} for {teragas} "
+                  f"TeraGas), but {ACCOUNT} has about "
+                  f"{near_str(spendable)} NEAR spendable (balance "
+                  f"{near_str(amount)} minus storage stake). Short "
+                  f"about {near_str(required - spendable)} NEAR. "
+                  "No transaction was sent."),
+        "required_near": near_str(required),
+        "spendable_near": near_str(spendable),
+        "shortfall_near": near_str(required - spendable),
+    }
+
+
 def near_call(fn, args, deposit_yocto=0):
     """Run one signed contract call as COMMONS_ACCOUNT_ID and verify it."""
     if not ACCOUNT:
@@ -507,6 +582,9 @@ def near_call(fn, args, deposit_yocto=0):
                 "error": f"near CLI binary resolved via {NEAR_CLI_SOURCE} "
                          f"does not exist: {NEAR_CLI}. Set "
                          "COMMONS_NEAR_CLI to the real binary path."}
+    preflight = _preflight(fn, deposit_yocto)
+    if preflight is not None:
+        return preflight
     deposit = f"{near_str(deposit_yocto)} NEAR"
     cmd = [
         NEAR_CLI, "contract", "call-function", "as-transaction", CONTRACT, fn,
@@ -539,8 +617,19 @@ def near_call(fn, args, deposit_yocto=0):
         if "Transaction ID" in line:
             tx_id = line.split(":")[-1].strip()
     if not tx_id:
+        # The CLI failed before broadcast (a balance refusal is the
+        # common case). Surface its own error line as the headline
+        # instead of the bare "no transaction id" wrapper, which
+        # forced operators to dig through CLI logs for the cause.
+        salient = [ln.strip() for ln in text.splitlines()
+                   if ("Error" in ln or "error:" in ln
+                       or "insufficient" in ln.lower()
+                       or "not enough" in ln.lower())]
+        headline = (salient[-1] if salient
+                    else "near CLI returned no transaction id")
         return {"ok": False, "near_cli": NEAR_CLI,
-                "error": "near CLI returned no transaction id",
+                "error": f"near CLI failed before broadcast: "
+                         f"{headline}"[:600],
                 "cli_output_tail": text[-1200:]}
     # The CLI prints a Transaction ID even for failed executions, so the
     # outcome is always read back from the chain before reporting.
@@ -747,6 +836,76 @@ def commons_status() -> dict:
         out["registrations"] = registrations
         if reg_errors:
             out["registration_read_errors"] = reg_errors
+        # Hosted rooms and what they still need (host feedback,
+        # 2026-11-11: unsettled epochs and forgotten residue were
+        # invisible unless the host went looking room by room).
+        hosted = []
+        try:
+            all_rooms = []
+            from_i = 0
+            while True:
+                page = view("list_rooms", {"from_index": from_i,
+                                           "limit": 50}) or []
+                all_rooms.extend(page)
+                if len(page) < 50 or from_i >= 1000:
+                    break
+                from_i += 50
+            for room in all_rooms:
+                if room.get("sponsor") != ACCOUNT:
+                    continue
+                entry = {
+                    "room_id": room["id"],
+                    "room_name": room["name"],
+                    "ended": bool(room.get("ended")),
+                    "cancelled": bool(room.get("cancelled")),
+                    "residue_withdrawn":
+                        bool(room.get("residue_withdrawn")),
+                }
+                flags = []
+                if entry["cancelled"]:
+                    pass
+                elif not room.get("started"):
+                    flags.append("recruiting")
+                elif not room.get("ended"):
+                    try:
+                        info = view("current_epoch",
+                                    {"room_id": room["id"]})
+                        raw = int(info.get("epoch", 0))
+                        due = (int(room["season_epochs"])
+                               if info.get("season_over")
+                               else min(int(room["season_epochs"]),
+                                        raw))
+                        unsettled = (due
+                                     - int(room["next_epoch_to_settle"]))
+                        if unsettled > 0:
+                            entry["unsettled_due_epochs"] = unsettled
+                            flags.append("unsettled_epochs")
+                        if info.get("season_over"):
+                            flags.append("needs_finalize")
+                    except Exception as e:
+                        entry["epoch_check_error"] = str(e)
+                elif not room.get("residue_withdrawn"):
+                    residue_y = (int(room["pool_balance"])
+                                 + int(room["refill_reserve"]))
+                    if residue_y > 0:
+                        entry["residue_waiting_near"] = \
+                            near_str(residue_y)
+                        flags.append("residue_waiting")
+                    gf_y = int(room.get("guarantee_fund") or 0)
+                    if gf_y > 0:
+                        entry["guarantee_fund_escrowed_near"] = \
+                            near_str(gf_y)
+                entry["attention"] = flags
+                hosted.append(entry)
+        except Exception as e:
+            out["hosted_rooms_error"] = str(e)
+        out["hosted_rooms"] = hosted
+        attn = [h for h in hosted
+                if any(f in h["attention"]
+                       for f in ("unsettled_epochs", "needs_finalize",
+                                 "residue_waiting"))]
+        if attn:
+            out["host_attention"] = attn
     return out
 
 
@@ -853,17 +1012,19 @@ def commons_create_room(
     name: str,
     stake: str,
     capacity: int,
-    seed: str,
-    refill_per_epoch: str,
-    cap_bps: int,
-    epoch_secs: int,
-    season_epochs: int,
+    seed: str = "",
+    refill_per_epoch: str = "",
+    cap_bps: int = 5000,
+    epoch_secs: int = 300,
+    season_epochs: int = 6,
     data_exclusivity_days: int = 0,
     regime: str = "",
     coverage: str = "",
     refill_mode: str = "",
     decay_bps: int = 9800,
     refill_floor: str = "0",
+    pool: str = "",
+    quote_only: bool = False,
 ) -> dict:
     """Host action: open a new room (season). Amounts (stake, seed,
     refill_per_epoch) are NEAR amounts: "0.005", "1.0" and "1" all
@@ -903,7 +1064,21 @@ def commons_create_room(
     "Flat", decay_bps default 9800, refill_floor a NEAR amount
     default "0"). Regime defaults to "Wild" on v4 and v5, where the
     argument is required. Passing coverage or refill_mode against an
-    older contract is an error, not silently ignored."""
+    older contract is an error, not silently ignored.
+
+    SEED VERSUS POOL (host feedback, 2026-11-11): the seed is the
+    room's TOTAL funding, not its starting pool. The contract puts
+    20% of the seed into the pool at creation and holds the other
+    80% as the refill reserve that tops the pool up by
+    refill_per_epoch each epoch. A host thinking "pool 5" who sends
+    seed "5" gets a 1 NEAR pool. Two ways to aim at the pool
+    instead: pass pool="5" (the seed is computed as exactly 5x the
+    pool) instead of seed, or pass quote_only=True to get the full
+    breakdown (seed, pool start, refill reserve, room fee,
+    Guarantee Fund, total deposit, and a balance check with any
+    shortfall) without signing anything. Every create result
+    carries the same breakdown, and the read-back verifies the
+    on-chain split matches it."""
     reg = (regime or "").strip()
     if reg and reg not in ("Wild", "Paced"):
         return err(f'invalid regime {regime!r}: must be "Wild" or '
@@ -929,7 +1104,25 @@ def commons_create_room(
     try:
         cfg = view("get_config", {})
         fee = int(cfg["room_fee"])
-        seed_y = to_yocto(seed)
+        if pool and seed:
+            return err("pass either seed (the room's total "
+                       "funding) or pool (the target starting "
+                       "pool), not both")
+        if pool:
+            seed_y = to_yocto(pool) * 5
+        elif seed:
+            seed_y = to_yocto(seed)
+        else:
+            return err("create_room needs a seed (total funding) "
+                       "or a pool target; the seed splits 20% "
+                       "starting pool / 80% refill reserve")
+        pool_start = seed_y * 2000 // 10000
+        breakdown = {
+            "seed_near": near_str(seed_y),
+            "pool_start_near": near_str(pool_start),
+            "refill_reserve_near": near_str(seed_y - pool_start),
+            "room_fee_near": near_str(fee),
+        }
         gf = 0
         if cfg.get("gas_per_epoch") is not None and cov != "Bare":
             gf = (capacity * season_epochs * int(cfg["gas_per_epoch"]) * 3) // 2
@@ -957,7 +1150,32 @@ def commons_create_room(
             args["refill_floor"] = str(to_yocto(refill_floor))
     except Exception as e:
         return err(f"bad arguments or config read failed: {e}")
+    breakdown["guarantee_fund_near"] = near_str(gf)
+    breakdown["total_deposit_near"] = near_str(fee + seed_y + gf)
+    if quote_only:
+        q = {"ok": True, "quote": True, "contract": CONTRACT,
+             "account": ACCOUNT, "breakdown": breakdown,
+             "note": "quote only: nothing was signed or sent. "
+                     "The seed splits 20% into the starting pool "
+                     "and 80% into the refill reserve; the deposit "
+                     "is room fee + seed + Guarantee Fund."}
+        try:
+            av = account_view(ACCOUNT)
+            spendable = max(0, int(av["amount"])
+                            - int(av.get("storage_usage") or 0)
+                            * 10 ** 19)
+            required = (fee + seed_y + gf
+                        + 30 * 10 ** 12 * _gas_price_yocto())
+            q["spendable_near"] = near_str(spendable)
+            q["required_near"] = near_str(required)
+            q["enough"] = spendable >= required
+            if not q["enough"]:
+                q["shortfall_near"] = near_str(required - spendable)
+        except Exception as e:
+            q["balance_check_error"] = str(e)
+        return q
     res = near_call("create_room", args, deposit_yocto=fee + seed_y + gf)
+    res["breakdown"] = breakdown
     if not res["ok"]:
         return res
     if gf:
@@ -1007,6 +1225,14 @@ def commons_create_room(
                 f"{room['refill_reserve']} yocto, but the seed was "
                 f"{seed_y} yocto ({near_str(seed_y)} NEAR); refusing "
                 "to report an under-funded room as a success")
+        elif int(room["pool_balance"]) != seed_y * 2000 // 10000:
+            res["ok"] = False
+            res["verified"] = False
+            res["error"] = (
+                "split mismatch: the new room's pool_balance is "
+                f"{room['pool_balance']} yocto, but 20% of the "
+                f"seed is {seed_y * 2000 // 10000} yocto; refusing "
+                "to report a differently-split room as a success")
         else:
             res["verified"] = True
     except Exception as e:
@@ -1150,9 +1376,10 @@ def commons_register_security(room_id: int) -> dict:
 @server.tool()
 def commons_commit(
     room_id: int,
-    amount: str,
-    reasoning: str,
+    amount: str = "",
+    reasoning: str = "",
     strategy: str = "custom",
+    amount_yocto: str = "",
 ) -> dict:
     """Commit a withdrawal decision for the current epoch (commit phase
     only). Builds the canonical reasoning record (SCHEME section 6),
@@ -1191,7 +1418,20 @@ def commons_commit(
                        "would likely land in the reveal phase and be "
                        "rejected on chain, burning gas. Wait for the "
                        f"commit phase of epoch {epoch + 1}.")
-        amount_y = to_yocto(amount)
+        try:
+            if amount_yocto:
+                if not amount_yocto.isdigit():
+                    return err("amount_yocto must be a string of "
+                               "digits (raw yocto)")
+                amount_y = int(amount_yocto)
+            elif amount:
+                amount_y = to_yocto(amount)
+            else:
+                return err("commit needs an amount: pass amount "
+                           "(a NEAR string) or amount_yocto (raw "
+                           "yocto digits)")
+        except ValueError as e:
+            return err(str(e))
         others = []
         last_settled = int(room["next_epoch_to_settle"]) - 1
         if last_settled >= 0:
@@ -1349,6 +1589,7 @@ def commons_reveal(
     reasoning_hash: str = "",
     salt: str = "",
     log_ref: str = "",
+    amount_yocto: str = "",
 ) -> dict:
     """Reveal a commitment made earlier by commons_commit for the
     current epoch (reveal phase only).
@@ -1395,14 +1636,21 @@ def commons_reveal(
     key, pending = _find_pending(state, room_id, epoch)
     if pending is not None and pending.get("revealed"):
         return err("this commitment was already revealed")
-    given = [bool(amount), bool(reasoning_hash), bool(salt)]
+    given = [bool(amount) or bool(amount_yocto),
+             bool(reasoning_hash), bool(salt)]
     if any(given) and not all(given):
         return err("explicit reveal needs amount, reasoning_hash and "
                    "salt together; pass all three, or none to use the "
                    "stored pending commit")
     if all(given):
         try:
-            amount_y = to_yocto(amount)
+            if amount_yocto:
+                if not amount_yocto.isdigit():
+                    return err("amount_yocto must be a string of "
+                               "digits (raw yocto)")
+                amount_y = int(amount_yocto)
+            else:
+                amount_y = to_yocto(amount)
         except Exception:
             return err(f"unparseable amount: {amount!r}")
         commitment = hashlib.sha256(
@@ -1614,6 +1862,180 @@ def commons_withdraw_residue(room_id: int) -> dict:
         res["verified"] = False
         res["error"] = f"verification failed: {e}"
     return res
+
+
+@server.tool()
+def commons_get_roster(room_id: int) -> dict:
+    """The room's full roster plus a host recap (current contract,
+    v7+): every seated agent with role, stake, active flag, epochs
+    revealed and total withdrawn, and a recap naming the top
+    harvester and the total paid out. Before this tool, answering
+    "who got the most in my room" meant hand-querying the roster
+    through the CLI (host feedback, 2026-11-11). On older contracts
+    there is no roster view; use commons_get_agent per account."""
+    ver, _v45, _v6p = _contract_flavor()
+    if ver < 7:
+        return err("commons_get_roster needs the current "
+                   "contract's get_roster view (v7+); the "
+                   f"configured contract is {CONTRACT}. Use "
+                   "commons_get_agent per account there.")
+    try:
+        roster = view("get_roster", {"room_id": room_id})
+        room = view("get_room", {"room_id": room_id})
+    except Exception as e:
+        return err(f"get_roster failed: {e}")
+    if roster is None or room is None:
+        return err(f"room {room_id} does not exist")
+
+    def wd(a):
+        return int(a.get("total_withdrawn") or 0)
+
+    feeders = [a for a in roster if a.get("role") == "feeder"]
+    security = [a for a in roster if a.get("role") == "security"]
+    top = max(feeders, key=wd, default=None)
+    recap = {
+        "feeders": len(feeders),
+        "security": len(security),
+        "total_paid_near": near_str(sum(wd(a) for a in feeders)),
+        "top_harvester": (
+            {"account": top["account"],
+             "withdrawn_near": near_str(wd(top))}
+            if top is not None and wd(top) > 0 else None),
+        "feeders_by_withdrawn": [
+            {"account": a["account"],
+             "withdrawn_near": near_str(wd(a)),
+             "epochs_revealed": a.get("epochs_revealed"),
+             "active": a.get("active")}
+            for a in sorted(feeders, key=wd, reverse=True)],
+    }
+    return {"ok": True, "room_id": room_id,
+            "room_name": room.get("name"), "roster": roster,
+            "recap": recap}
+
+
+@server.tool()
+def commons_settle_room(room_id: int, max_epochs: int = 100) -> dict:
+    """Settle every due epoch of a room, in order, in one call
+    (host feedback, 2026-11-11: settlement is permissionless but
+    nothing settled unless someone called settle_epoch per epoch,
+    so hosts ended up running their own keepers). An epoch is due
+    once its time has fully ended; epochs settle strictly in
+    order. The signer pays the settle gas (about 0.0004 NEAR per
+    epoch all-in). Stops at the first failure and reports exactly
+    which epochs landed. For a season that is already over,
+    commons_close_room is the shorter path: finalize settles
+    everything remaining itself."""
+    try:
+        room = view("get_room", {"room_id": room_id})
+        if room is None:
+            return err(f"room {room_id} does not exist")
+        if room.get("cancelled"):
+            return err(f"room {room_id} is cancelled")
+        if not room.get("started"):
+            return err(f"room {room_id} has not started")
+        info = view("current_epoch", {"room_id": room_id})
+    except Exception as e:
+        return err(f"settle_room read failed: {e}")
+    raw = int(info.get("epoch", 0))
+    due = (int(room["season_epochs"]) if info.get("season_over")
+           else min(int(room["season_epochs"]), raw))
+    nxt = int(room["next_epoch_to_settle"])
+    if due <= nxt:
+        return {"ok": True, "room_id": room_id, "settled": [],
+                "settled_count": 0, "next_epoch_to_settle": nxt,
+                "note": "no epoch is due for settlement"}
+    settled = []
+    for e in range(nxt, min(due, nxt + max(1, max_epochs))):
+        res = near_call("settle_epoch", {"room_id": room_id,
+                                         "epoch": e})
+        if not res["ok"]:
+            return {"ok": False, "room_id": room_id,
+                    "settled": settled,
+                    "settled_count": len(settled), "failed_epoch": e,
+                    "error": res.get("error"),
+                    "tx_id": res.get("tx_id")}
+        settled.append(e)
+    try:
+        room2 = view("get_room", {"room_id": room_id})
+        return {"ok": True, "room_id": room_id, "settled": settled,
+                "settled_count": len(settled),
+                "next_epoch_to_settle":
+                    int(room2["next_epoch_to_settle"]),
+                "total_paid_out_near":
+                    near_str(int(room2["total_paid_out"]))}
+    except Exception as e:
+        return {"ok": False, "room_id": room_id, "settled": settled,
+                "settled_count": len(settled),
+                "error": f"settled but read-back failed: {e}"}
+
+
+@server.tool()
+def commons_close_room(room_id: int) -> dict:
+    """One-call close-out for a finished season (host feedback,
+    2026-11-11: finalize and withdraw_residue were two separate
+    signings, and the second was easy to forget with NEAR still
+    inside). Runs finalize when the season is over and not yet
+    finalized (finalize itself settles every remaining epoch),
+    then withdraws the residue to the host. The withdraw step is
+    host-only on chain: when the configured account is not the
+    host, the result says so and names the residue waiting for
+    the host instead of failing."""
+    try:
+        room = view("get_room", {"room_id": room_id})
+    except Exception as e:
+        return err(f"close_room read failed: {e}")
+    if room is None:
+        return err(f"room {room_id} does not exist")
+    if room.get("cancelled"):
+        return err(f"room {room_id} is cancelled; nothing to close")
+    if not room.get("started"):
+        return err(f"room {room_id} has not started; there is no "
+                   "season to close (a recruiting room is closed "
+                   "by cancelling it)")
+    out = {"ok": True, "room_id": room_id, "host": room["sponsor"]}
+    if not room["ended"]:
+        fin = commons_finalize_room(room_id)
+        if not fin["ok"]:
+            out.update({"ok": False, "step": "finalize",
+                        "error": fin.get("error"),
+                        "tx_id": fin.get("tx_id")})
+            return out
+        out["finalize_tx"] = fin.get("tx_id")
+        try:
+            room = view("get_room", {"room_id": room_id})
+        except Exception as e:
+            out.update({"ok": False, "step": "read-back",
+                        "error": str(e)})
+            return out
+    out["finalized"] = True
+    residue_y = (int(room["pool_balance"])
+                 + int(room["refill_reserve"]))
+    out["residue_near"] = near_str(residue_y)
+    gf_y = int(room.get("guarantee_fund") or 0)
+    if gf_y > 0:
+        out["guarantee_fund_escrowed_near"] = near_str(gf_y)
+        out["guarantee_fund_note"] = (
+            "the unspent part of the escrowed Guarantee Fund "
+            "returns together with the residue on withdraw")
+    if room.get("residue_withdrawn"):
+        out["residue_withdrawn"] = True
+        out["note"] = "this room was already closed out"
+        return out
+    if room["sponsor"] != ACCOUNT:
+        out["residue_withdrawn"] = False
+        out["note"] = (f"finalized; the residue of "
+                       f"{near_str(residue_y)} NEAR can only be "
+                       f"withdrawn by the host ({room['sponsor']})")
+        return out
+    wd = commons_withdraw_residue(room_id)
+    if not wd["ok"]:
+        out.update({"ok": False, "step": "withdraw_residue",
+                    "error": wd.get("error"),
+                    "tx_id": wd.get("tx_id")})
+        return out
+    out["residue_withdrawn"] = True
+    out["withdraw_tx"] = wd.get("tx_id")
+    return out
 
 
 @server.tool()
