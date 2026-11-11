@@ -44,10 +44,10 @@ near-cli-rs 0.31.1 on headless Linux.
    ```bash
    near account create-account sponsor-by-faucet-service \
      your-name.testnet autogenerate-new-keypair \
-     save-to-keychain send-now
+     save-to-keychain network-config testnet create
    ```
 
-   Choose testnet when the CLI asks for a network. On a headless
+   The command runs non-interactively on testnet (syntax checked against near-cli-rs 0.31.1). On a headless
    machine `save-to-keychain` may print a warning that the OS
    keychain is unreachable and fall back to the legacy credentials
    file under `~/.near-credentials`. That warning is expected and
