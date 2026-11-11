@@ -2242,9 +2242,10 @@ function renderSecurity(){
   setText("sec-count", String(r.security_count));
   setText("sec-pot", fmtNear(r.security_pot));
   setText("sec-thresh", String(Math.floor(Number(r.security_count) / 2) + 1));
-  if(state.cfg1){
-    setText("sec-slash-kv", (Number(state.cfg1.abuse_slash_bps) / 100) + "% of target stake to the pot · feeder deactivated");
-    setText("sec-tax-kv", (Number(state.cfg1.exit_tax_bps) / 100) + "% of stake to the security pot");
+  var secCfg = (r._contract === S6 && state.cfg6) ? state.cfg6 : state.cfg1;
+  if(secCfg){
+    setText("sec-slash-kv", (Number(secCfg.abuse_slash_bps) / 100) + "% of target stake to the pot · feeder deactivated");
+    setText("sec-tax-kv", (Number(secCfg.exit_tax_bps) / 100) + "% of stake to the security pot");
   }
   if(state.cfg6) setText("sec-retainer-kv", fmtNear(state.cfg6.retainer_per_security) + " NEAR each, paid at finalize");
   var assembled = agentRows(r);
@@ -2260,9 +2261,9 @@ function renderSecurity(){
   }
 }
 function renderEconomics(){
-  if(state.cfg1){
-    setText("ec-tax", (Number(state.cfg1.exit_tax_bps) / 100) + "%");
-    setText("ec-slash", (Number(state.cfg1.abuse_slash_bps) / 100) + "%");
+  if(state.cfg6){
+    setText("ec-tax", (Number(state.cfg6.exit_tax_bps) / 100) + "%");
+    setText("ec-slash", (Number(state.cfg6.abuse_slash_bps) / 100) + "%");
     setHTML("ec-cfg1",
         '<div class="kv"><span>Owner</span><b>' + acctLinkFull(state.cfg1.owner) + '</b></div>'
       + '<div class="kv"><span>Room fee</span><b>' + fmtNear(state.cfg1.room_fee) + ' NEAR</b></div>'
@@ -2289,8 +2290,8 @@ function renderEconomics(){
       ["Anyone (permissionless)", "Settle one epoch (measured)", "0.0000310 NEAR"],
       ["Contract account headroom", "Storage locked per settled epoch at 10 feeders (measured), 0.00395 NEAR per feeder per epoch", "About 0.0395 NEAR"],
       ["Security agent", "Retainer paid at finalize out of the room fee", fmtNear(state.cfg6.retainer_per_security) + " NEAR each"],
-      ["Feeder leaving early", "Exit tax from stake into the security pot", (Number(state.cfg1.exit_tax_bps) / 100) + "% of stake"],
-      ["Feeder with a confirmed abuse report", "Slash from stake into the security pot; the rest of the stake is refunded", (Number(state.cfg1.abuse_slash_bps) / 100) + "% of stake"]
+      ["Feeder leaving early", "Exit tax from stake into the security pot", (Number(state.cfg6.exit_tax_bps) / 100) + "% of stake"],
+      ["Feeder with a confirmed abuse report", "Slash from stake into the security pot; the rest of the stake is refunded", (Number(state.cfg6.abuse_slash_bps) / 100) + "% of stake"]
     ];
     setHTML("ec-ledger", rows.map(function(x){
       return '<tr><td>' + esc(x[0]) + '</td><td>' + esc(x[1]) + '</td><td>' + esc(x[2]) + '</td></tr>';
@@ -2664,23 +2665,32 @@ function loadRoomEpochs(id, renderAfter){
 function scanReports(){
   if(state.reportsScanned) return Promise.resolve();
   state.reportsScanned = true;
-  var ids = [];
-  for(var i=0;i<64;i++) ids.push(i);
-  var nulls = 0;
+  /* Reports live per contract; scan each fleet version and
+     translate the contract-local room id to the app id space
+     (v5 +1000, v6 +2000) that loadAgentsAndProfiles matches on. */
+  var sources = [ {contract: CONTRACT, offset: 0}, {contract: S5, offset: 1000}, {contract: S6, offset: 2000} ];
   var chain = Promise.resolve();
   var found = [];
-  ids.forEach(function(i){
-    chain = chain.then(function(){
-      if(nulls >= 2) return null;
-      return rpcSoft("get_report", {report_id: i}).then(function(rep){
-        if(rep){ found.push(rep); nulls = 0; }
-        else nulls++;
-      });
-    });
+  sources.forEach(function(src){
+    var nulls = 0;
+    for(var i = 0; i < 64; i++){
+      (function(i){
+        chain = chain.then(function(){
+          if(nulls >= 2) return null;
+          return rpcSoftC(src.contract, "get_report", {report_id: i}).then(function(rep){
+            if(rep){ var r2 = {}; for(var k in rep) r2[k] = rep[k]; r2.room_id = rep.room_id + src.offset; found.push(r2); nulls = 0; }
+            else nulls++;
+          });
+        });
+      })(i);
+    }
   });
   return chain.then(function(){ state.reports = found; });
 }
-/* The global board reads get_agent for every known account in every room.
+/* The global board reads get_agent for every known or discovered
+   account in every room: accounts discovered from epoch reveals
+   and abuse reports join the sweep, so an outside operator can
+   appear on the board, not only the hardcoded fleet accounts.
    The public mirrors throttle bursts, so results are cached per room and
    account as they land: a resolved read (a view, or null for not seated) is
    never fetched again, failed reads stay uncached and are retried on the
@@ -2708,9 +2718,29 @@ function gbSaveSnapshot(rows){
    room list lands rather than after the selected room's whole epoch
    history. A completed sweep is snapshotted to localStorage, so the
    next visit paints the board instantly and updates it in place. */
+function gbAccounts(){
+  var seen = {}, out = [];
+  function add(a){ if(a && !seen[a]){ seen[a] = true; out.push(a); } }
+  KNOWN_ACCOUNTS.forEach(add);
+  Object.keys(state.discoveredAccounts || {}).forEach(add);
+  Object.keys(state.epochsByRoom || {}).forEach(function(rid){
+    (state.epochsByRoom[rid] || []).forEach(function(e){
+      (e.reveals || []).forEach(function(rv){ add(rv.account); });
+    });
+  });
+  return out;
+}
 function loadGlobalBoard(){
-  if(state.gbLoading || state.gbDone) return;
+  if(state.gbLoading) return;
   if(!state.rooms.length) return;
+  if(state.gbDone){
+    var missing0 = false;
+    state.rooms.forEach(function(r){
+      gbAccounts().forEach(function(acct){ if(!(gbKey(r.id, acct) in state.gbCache)) missing0 = true; });
+    });
+    if(!missing0) return;
+    state.gbDone = false;
+  }
   state.gbCache = state.gbCache || {};
   var rooms = state.rooms.slice().sort(function(a, b){
     var la = (a.started && !a.ended) ? 0 : 1, lb = (b.started && !b.ended) ? 0 : 1;
@@ -2718,7 +2748,7 @@ function loadGlobalBoard(){
   });
   var jobs = [];
   rooms.forEach(function(r){
-    KNOWN_ACCOUNTS.forEach(function(acct){
+    gbAccounts().forEach(function(acct){
       var k = gbKey(r.id, acct);
       if(!(k in state.gbCache)) jobs.push({ room: r.id, cid: roomCid(r), contract: roomContract(r), acct: acct, key: k });
     });
@@ -2742,7 +2772,7 @@ function loadGlobalBoard(){
     state.gbLoading = false;
     var missing = 0;
     state.rooms.forEach(function(r){
-      KNOWN_ACCOUNTS.forEach(function(acct){ if(!(gbKey(r.id, acct) in state.gbCache)) missing++; });
+      gbAccounts().forEach(function(acct){ if(!(gbKey(r.id, acct) in state.gbCache)) missing++; });
     });
     if(!missing) state.gbDone = true;
     renderGlobalBoard();
@@ -2799,6 +2829,8 @@ function loadAgentsAndProfiles(room){
     if(rep.room_id === room.id){ seen[rep.reporter] = true; seen[rep.target] = true; }
   });
   var accts = Object.keys(seen);
+  state.discoveredAccounts = state.discoveredAccounts || {};
+  accts.forEach(function(a){ state.discoveredAccounts[a] = true; });
   var map = state.agentsByRoom[room.id] || (state.agentsByRoom[room.id] = {});
   /* Probes run in small sequential batches: one wide parallel burst
      is the first thing throttled mirrors drop, and a dead burst used
@@ -2817,7 +2849,6 @@ function loadAgentsAndProfiles(room){
     })(accts.slice(bi, bi + 6));
   }
   var profJobs = accts.filter(function(acct){ return !state.profileTried[acct]; }).map(function(acct){
-    state.profileTried[acct] = true;
     return rpcSoftC(S6, "get_profile", {account: acct}).then(function(p){
       if(p && (p.display_name || p.bio || p.social)) return p;
       return rpcSoftC(S5, "get_profile", {account: acct}).then(function(p2){
@@ -2825,7 +2856,7 @@ function loadAgentsAndProfiles(room){
         return rpcSoftC(V2, "get_profile", {account: acct});
       });
     }).then(function(p){
-      if(p && p.display_name) state.profiles[acct] = p;
+      if(p && p.display_name){ state.profiles[acct] = p; state.profileTried[acct] = true; }
     });
   });
   var chain = Promise.resolve();
@@ -3062,7 +3093,7 @@ function signWithPopupWatch(wallet, method, args, depositYocto, waitText, receiv
       receiverId: receiverId || S6,
       actions: [{
         type: "FunctionCall",
-        params: { methodName: method, args: args, gas: "100000000000000", deposit: depositYocto || "0" },
+        params: { methodName: method, args: args, gas: method === "finalize_room" ? "300000000000000" : "100000000000000", deposit: depositYocto || "0" },
       }],
     });
   }catch(e){
@@ -3353,7 +3384,7 @@ function renderMyRooms(rooms){
     var residue = big(room.pool_balance) + big(room.refill_reserve) + big(room.gf_remaining);
     var residueGone = room.ended && residue === 0n;
     div.innerHTML =
-      "<h3>" + esc(room.name) + " <span class='meta'>room " + room.id + " · " + (room._contract === S5 ? "v5" : "v3") + " contract</span><span class='pill' data-state>loading state…</span></h3>" +
+      "<h3>" + esc(room.name) + " <span class='meta'>room " + room.id + " · " + (room._contract === S6 ? "v6" : room._contract === S5 ? "v5" : room._contract === S3 ? "v3" : "v1") + " contract</span><span class='pill' data-state>loading state…</span></h3>" +
       "<div class='meta'>" + esc(room.regime) + " · stake " + fmtNear(room.stake) + " NEAR · capacity " + room.capacity +
       " · feeders " + room.feeders_count + " · security " + room.security_count +
       " · pool " + fmtNear(room.pool_balance) + " NEAR · paid out " + fmtNear(room.total_paid_out) + " NEAR" +
@@ -3389,18 +3420,19 @@ function renderMyRooms(rooms){
     if(!room.started){
       stateEl.textContent = "Recruiting";
       var isV5 = room._contract === S5;
-      var quorum = room.security_count >= 3 && (!isV5 || room.feeders_count >= 2);
+      var isV6 = room._contract === S6;
+      var quorum = room.security_count >= 3 && (!(isV5 || isV6) || room.feeders_count >= 2);
       if(quorum){
         addButton("Start season", "start_room", "Gas only, no deposit. Anchors the season clock now.");
       }else{
         var s = document.createElement("span");
         s.className = "hint";
-        s.textContent = isV5
+        s.textContent = (isV5 || isV6)
           ? "Waiting for players: start unlocks at 2 feeders and 3 security (now " + room.feeders_count + " feeders, " + room.security_count + " security). The room also starts itself when the quorum completes. Agents register through the MCP."
           : "Start unlocks when at least 3 security agents are seated (now " + room.security_count + "). Agents register through the MCP.";
         actions.appendChild(s);
       }
-      if(isV5){
+      if(isV5 || isV6){
         addButton("Cancel room", "cancel_room", "Seed and any Guarantee Fund return to you; the room fee does not.");
       }
     }else if(room.ended){
