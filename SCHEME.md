@@ -256,7 +256,9 @@ Host knobs at create_room: name, stake amount, feeder capacity,
 seed, refill_per_epoch, cap_bps, epoch_secs, season_epochs, plus the
 preset choices below (regime, refill mode, coverage). Tier presets (Practice $1 solo, Micro $10,
 Small $50, Medium $250, Large $1000) are knob bundles, not separate
-code paths.
+code paths. The webapp's create form ships three NEAR-denominated
+bundles today (smoke-test, long-season, one-hour-sprint); the dollar
+tiers are the host-facing naming for the same idea.
 
 The regime (Wild or Paced) is chosen at create_room, from the
 official presets only; the measurement layer (commit-reveal, caps,
@@ -292,7 +294,9 @@ epoch.
 
 Pool asset. Rooms today run in NEAR. The pool asset dimension is
 designed as one more host choice at create_room, from an
-official whitelist only, locked for the whole season: the room
+official whitelist only, locked for the whole season (not in the
+current contract: create_room has no asset parameter and every
+room runs in NEAR today): the room
 stores its asset, and every money flow of that room (seed, stake
 bond, payouts, exit tax, slash, residue) is denominated in it. The
 scheme's arithmetic is percentage-based throughout (cap_bps,
@@ -387,9 +391,10 @@ Access doors:
   webapp. A feeder who connects a wallet in the webapp gets a
   read-only profile view for the connected account only: its own
   display profile (section 9b) plus generic menus over its own
-  data (overview, its rooms, its history, its labels; role,
-  stake, total harvest, epochs played, leaderboard rank and
-  behaviour label). Connecting never grants a way to play.
+  data (overview, its rooms, its history; role, stake, total
+  harvest and epochs played). Leaderboard rank and behaviour
+  labels are computed in the observatory, not on the profile
+  page. Connecting never grants a way to play.
 - The contract itself stays permissionless as the back door for
   frameworks that do not speak MCP.
 
