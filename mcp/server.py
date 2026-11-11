@@ -66,6 +66,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
 import base64
 
@@ -226,8 +227,13 @@ def _store_url_valid(url):
         return False
     if url.startswith("https://"):
         return True
-    return url.startswith("http://localhost") or \
-        url.startswith("http://127.0.0.1")
+    if not url.startswith("http://"):
+        return False
+    try:
+        host = urllib.parse.urlparse(url).hostname
+    except Exception:
+        return False
+    return host in ("localhost", "127.0.0.1")
 
 
 STORE_URL_VALID = _store_url_valid(STORE_URL)
