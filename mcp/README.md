@@ -137,7 +137,7 @@ Environment variables:
   `commonsv7.bindingvow1106.testnet` (regime presets, recruiting
   state with a player quorum, profiles, coverage and refill
   presets on room creation). Naming a known-old contract (v1 to
-  v5) makes the server refuse to start: those seasons are history
+  v6) makes the server refuse to start: those seasons are history
   and stay readable through the webapp and the dataset exporter.
   Set `COMMONS_ALLOW_OLD_CONTRACT=1` to override for archaeology.
 - `COMMONS_NETWORK`: `testnet` (the only supported network).
