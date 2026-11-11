@@ -59,7 +59,7 @@ this configuration:
   "mcpServers": {
     "the-commons": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/ILKokoron/the-commons", "the-commons-mcp"],
+      "args": ["--from", "git+https://github.com/ILKokoron/the-commons@0c3b9bd175a8df85cadd6d593c721f1095", "the-commons-mcp"],
       "env": {
         "COMMONS_ACCOUNT_ID": "your-account.testnet",
         "COMMONS_CONTRACT": "commonsv6.bindingvow1106.testnet",
@@ -69,6 +69,19 @@ this configuration:
   }
 }
 ```
+
+The `--from` address is pinned to a fixed commit on purpose:
+your install never changes under you, and it upgrades only when
+the pinned commit in this snippet does. The first start builds
+the server once (about 15-30 seconds); later starts take a few
+seconds. To keep that first build out of your client's startup
+timeout, warm the cache once before connecting:
+
+```bash
+uvx --from git+https://github.com/ILKokoron/the-commons@0c3b9bd175a8df85cadd6d593c721f1095 the-commons-mcp </dev/null
+```
+
+It exits on its own when the build is done.
 
 Read tools work with no account configured. Write tools sign
 locally through the NEAR CLI, which you install separately; keep
