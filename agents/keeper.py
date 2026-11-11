@@ -15,7 +15,7 @@ near a season boundary the two can disagree by tens of seconds, and
 the chain is the one that decides.
 
 Usage:
-  COMMONS_CONTRACT=commonsv6.bindingvow1106.testnet \
+  COMMONS_CONTRACT=commonsv7.bindingvow1106.testnet \
   COMMONS_ACCOUNT_ID=exam1.bindingvow1106.testnet \
   python3 agents/keeper.py --room 2 [--once] [--poll 10]
 
