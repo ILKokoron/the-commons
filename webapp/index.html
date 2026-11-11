@@ -511,8 +511,16 @@ function near(x, dp) {
   if (dp !== undefined) return nearFixed(x, dp);
   const a = x < 0n ? -x : x;
   if (a === 0n || a >= YOCTO / 100n) return nearFixed(x, 2);
-  const s = nearFixed(x, 6);
-  return s.replace(/0+$/, '').replace(/\.$/, '.00');
+  /* Below 0.01 NEAR, widen the precision until a non-zero amount
+     actually shows: at 6dp a 3-yocto-scale remainder rounds to
+     0.000000 and the strip below would print "0.00", the exact
+     lie the 6dp path exists to avoid. 24dp is yocto-exact, so
+     the loop always terminates truthfully. */
+  for (const p of [6, 12, 18, 24]) {
+    const s = nearFixed(x, p).replace(/0+$/, '').replace(/\.$/, '.00');
+    if (s !== '0.00' && s !== '-0.00') return s;
+  }
+  return nearFixed(x, 24);
 }
 
 function makeCtx(room, records, security = []) {
@@ -1346,6 +1354,17 @@ function roomFinished(room){
   return false;
 }
 function seedOf(room){
+  /* The seed is exactly pool + refill reserve + total paid out
+     (the same identity commonsRoom uses); while any of the money
+     is still in the room, or the room has not ended, that is the
+     whole seed. The old epoch-0 reconstruction (start pool x 5,
+     from the 20 percent initial split) survives only as a
+     fallback for rooms whose funds already left (finalized and
+     residue withdrawn), where the identity degrades to
+     total_paid_out alone; on v1 rooms the split differed and
+     the two definitions disagreed by up to 2x. */
+  var exact = big(room.pool_balance) + big(room.refill_reserve) + big(room.total_paid_out);
+  if(big(room.pool_balance) + big(room.refill_reserve) > 0n || !room.ended) return exact;
   var eps = state.epochsByRoom[room.id] || [];
   var e0 = null;
   eps.forEach(function(e){ if(e.epoch === 0) e0 = e; });
@@ -1353,7 +1372,7 @@ function seedOf(room){
     var startPool = big(e0.pool_after) - big(e0.refill_moved) + big(e0.total_paid);
     if(startPool > 0n) return startPool * 5n;
   }
-  return big(room.pool_balance) + big(room.refill_reserve) + big(room.total_paid_out);
+  return exact;
 }
 function poolPct(room){
   var seed = seedOf(room);
@@ -2695,7 +2714,19 @@ function scanReports(){
       })(i);
     }
   });
-  return chain.then(function(){ state.reports = found; });
+  return chain.then(function(){
+    state.reports = found;
+    if(found.length) return null;
+    /* An empty result after a bad-RPC stretch is indistinguishable
+       from a failed scan (a soft read returns null both ways), and
+       latching it would hide reports for the whole session. V1
+       report 0 exists on chain, so probe it: if even that read
+       comes back null, treat the scan as failed and let a later
+       refresh retry. */
+    return rpcSoftC(CONTRACT, "get_report", {report_id: 0}).then(function(probe){
+      if(!probe) state.reportsScanned = false;
+    });
+  });
 }
 /* The global board reads get_agent for every known or discovered
    account in every room: accounts discovered from epoch reveals
