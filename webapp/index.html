@@ -2669,7 +2669,7 @@ function snapLoad(){
   state.currentByRoom = snap.currents || {};
   state.epochsByRoom = snap.epochs || {};
   state.agentsByRoom = snap.agents || {};
-  state.agentsLoadedByRoom = snap.agentsLoaded || {};
+  state.agentsLoadedByRoom = {}; /* loaded flags are per-session: a restored snapshot must not present its rows as a finished count */
   state.profiles = snap.profiles || {};
   if(snap.selected != null && state.rooms.some(function(r){ return r.id === snap.selected; })) state.selected = snap.selected;
   state.snapshotTs = snap.ts || null;
@@ -3027,7 +3027,7 @@ function loadAgentsAndProfilesProbed(room){
   });
   var chain = Promise.resolve();
   steps.forEach(function(step){ chain = chain.then(step); });
-  return Promise.all([chain, Promise.all(profJobs)]).then(function(){ state.agentsLoadedByRoom[room.id] = true; renderAll(); snapSave(); });
+  return Promise.all([chain, Promise.all(profJobs)]).then(function(){ if(Object.keys(map).length) state.agentsLoadedByRoom[room.id] = true; renderAll(); snapSave(); });
 }
 function selectRoom(id){
   if(state.selected === id) { renderAll(); loadRoomEpochs(id, true).then(function(){ loadAgentsAndProfiles(selectedRoom()); }); return; }
