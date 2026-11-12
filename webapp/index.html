@@ -24,7 +24,7 @@
 #myRooms .room h3 .meta{font:10px var(--mono);color:var(--muted)}
 #myRooms .room .meta{font:10px/1.7 var(--mono);color:var(--muted)}
 #myRooms .room .actions{margin-top:10px}
-#myRooms .room .hint{font:10px/1.6 var(--mono);color:var(--muted)}
+#myRooms .room .hint, #rd-host-actions .hint{font:10px/1.6 var(--mono);color:var(--muted)}
 .split{display:grid;grid-template-columns:1.2fr .8fr;gap:10px;margin-top:10px}.rule{border-top:1px solid var(--line);padding-top:13px;margin-top:13px}.kv{display:flex;justify-content:space-between;gap:15px;padding:10px 0;border-bottom:1px solid #ece9e1;font:10px var(--mono)}.kv span{color:var(--muted)}.kv b{font-weight:500;text-align:right}.poolbig{font:56px var(--serif);letter-spacing:-.07em}.poolbig small{font:12px var(--mono);color:var(--muted);letter-spacing:0}.bar{height:10px;background:#e7e5dd;display:flex;overflow:hidden;margin:15px 0 8px}.bar span:first-child{background:var(--green)}.bar span:last-child{background:#bbc6b4}.legend{font:9px var(--mono);color:var(--muted);display:flex;gap:17px}.legend i{width:7px;height:7px;background:var(--green);display:inline-block;border-radius:50%;margin-right:5px}.legend span+span i{background:#bbc6b4}
 .table-wrap{overflow:auto}.table{border-collapse:collapse;width:100%;min-width:540px}.table th{text-align:left;font:9px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:400;padding:0 10px 12px 0}.table td{font:10px var(--mono);padding:13px 10px 13px 0;border-top:1px solid #ece9e1;white-space:nowrap}.table td:last-child,.table th:last-child{text-align:right;padding-right:0}.agentname{display:flex;align-items:center;gap:9px}.agenticon{width:27px;height:27px;border-radius:50%;background:#e4e9df;color:var(--green);display:grid;place-items:center;font:12px var(--serif)}.agentname b{font:11px var(--serif);font-weight:400}.agentname small{display:block;font:8px var(--mono);color:var(--muted);margin-top:3px}.muted{color:var(--muted)}.good{color:var(--green)}.warn{color:var(--orange)}.bad{color:var(--red)}
 .feed{display:grid}.event{display:flex;gap:12px;padding:13px 0;border-top:1px solid #ece9e1}.event:first-child{border-top:0}.eventdot{width:7px;height:7px;border-radius:50%;background:var(--green);margin-top:4px;flex:none}.eventdot.orange{background:var(--orange)}.event b{font:13px var(--serif);font-weight:400;display:block;margin-bottom:4px}.event small{font:9px/1.5 var(--mono);color:var(--muted)}
@@ -327,6 +327,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
 
   <section class="page" id="room">
     <div class="page-head"><div><div class="eyebrow" id="rd-eyebrow">Workspace / Room detail</div><h1 id="rd-name">Room detail</h1><p class="intro" id="rd-intro">Select a room to read its record.</p></div><div class="actions"><span class="tag" id="rd-state">Loading</span></div></div>
+    <div class="actions" id="rd-host-actions" style="display:none;align-items:center;margin-bottom:10px"></div>
     <div class="grid g4"><div class="metric"><label>Pool balance</label><strong id="rd-pool">-</strong><small>NEAR</small></div><div class="metric"><label>Feeders</label><strong id="rd-feeders">-</strong><small id="rd-feeders-sub">Seated</small></div><div class="metric"><label>Season epochs</label><strong id="rd-epochs">-</strong><small>Settled / total</small></div><div class="metric"><label>Security agents</label><strong id="rd-security">-</strong><small>Seated</small></div></div>
     <div class="panel" id="rd-live-panel" style="margin-top:10px;display:none"><div class="panel-title"><div><h2>Live now</h2><p id="rd-live-line">Reading the clock</p></div><span class="tag" id="rd-live-phase">-</span></div><div class="bar"><span id="rd-live-bar" style="width:0%"></span><span id="rd-live-bar-rest" style="width:100%"></span></div><div class="legend"><span><i></i><span id="rd-live-legend">Phase progress</span></span><span id="rd-live-count"></span></div></div>
     <div class="split"><div class="panel"><div class="panel-title"><div><h2>Room configuration</h2></div></div><div id="rd-config"><div class="kv"><span>Status</span><b>Reading</b></div></div></div>
@@ -2049,6 +2050,40 @@ function renderRoomDetail(){
   setText("rd-intro", phase);
   var st = $("rd-state");
   if(st) st.outerHTML = stateTag(r).replace('<span ', '<span id="rd-state" ');
+  /* Host actions on the detail itself: a recruiting room the viewer hosts
+     can be cancelled here, not only from the Rooms you host list. */
+  var ha = $("rd-host-actions");
+  if(ha){
+    ha.innerHTML = "";
+    if(accountId && r.sponsor === accountId && isRecruiting(r)){
+      ha.style.display = "";
+      var cb = document.createElement("button");
+      cb.type = "button";
+      cb.className = "btn";
+      cb.textContent = "Cancel room";
+      cb.addEventListener("click", function(){
+        cb.disabled = true;
+        var waitText = "Waiting for your wallet to sign cancel_room for room " + roomCid(r) + "…";
+        walletCall("cancel_room", {room_id: roomCid(r)}, "0", waitText, roomContract(r)).then(function(result){
+          var h = txHashOf(result);
+          showStatus("ok", "Room cancelled" + (h ? " (transaction " + h + ")" : "") + ". Your deposit is on its way back.");
+          go("host");
+          loadMyRooms();
+        }).catch(function(e){
+          showStatus("err", "cancel_room failed: " + e.message);
+          go("host");
+          loadMyRooms();
+        });
+      });
+      ha.appendChild(cb);
+      var chint = document.createElement("span");
+      chint.className = "hint";
+      chint.textContent = "Seed and any Guarantee Fund return to you; the room fee does not.";
+      ha.appendChild(chint);
+    } else {
+      ha.style.display = "none";
+    }
+  }
   setText("rd-pool", fmtNear(r.pool_balance));
   setText("rd-feeders", String(r.feeders_count));
   setText("rd-feeders-sub", "Seated of " + r.capacity + " capacity");
@@ -3208,11 +3243,17 @@ function paintWallet(){
   if(accountId) loadMyRooms();
   else document.getElementById("myRooms").innerHTML = "<p class='muted'>Connect your wallet to see the rooms hosted by your account.</p>";
   /* A redirect wallet returns here after signing: the session is back,
-     so a create that was waiting on its hash can finally open the room. */
-  if(accountId && pendingRoomOpenHash){
-    var h = pendingRoomOpenHash;
-    pendingRoomOpenHash = null;
-    openPendingRoom(h, accountId);
+     so a create that was waiting on its hash can finally open the room.
+     If the session did not come back with it, say so instead of waiting
+     silently: reconnecting fires this again. */
+  if(pendingRoomOpenHash){
+    if(accountId){
+      var h = pendingRoomOpenHash;
+      pendingRoomOpenHash = null;
+      openPendingRoom(h, accountId);
+    } else {
+      showStatus("wait", "Transaction submitted. Connect your wallet to open the new room.");
+    }
   }
 }
 async function ensureSelector(){
@@ -3566,8 +3607,9 @@ function roomIdFromResult(result){
 }
 function openCreatedRoom(chainId){
   var appId = 3000 + chainId;
+  var notOpened = "Room created (room " + chainId + ") but I could not open it yet. Find it in Rooms you host below.";
   rpcRetryC(S7, "get_room", {room_id: chainId}, 4).then(function(room){
-    if(!room) return;
+    if(!room){ showStatus("wait", notOpened); return; }
     room.contract = S7; room.cid = room.id; room.id = appId;
     var i, found = false;
     for(i = 0; i < state.rooms.length; i++){
@@ -3576,7 +3618,7 @@ function openCreatedRoom(chainId){
     if(!found) state.rooms.push(room);
     selectRoom(appId);
     go("room");
-  }).catch(function(){});
+  }).catch(function(){ showStatus("wait", notOpened); });
 }
 function openNewestHostedRoom(beforeMax, tries){
   /* beforeMax -1 means no baseline (a redirect reload starts with an
@@ -3590,8 +3632,10 @@ function openNewestHostedRoom(beforeMax, tries){
     });
     if(newest) openCreatedRoom(newest.id);
     else if((tries || 0) < 2) setTimeout(function(){ openNewestHostedRoom(beforeMax, (tries || 0) + 1); }, 2000);
+    else showStatus("wait", "Room created but the new room is not visible yet. It will appear in Rooms you host below.");
   }).catch(function(){
     if((tries || 0) < 2) setTimeout(function(){ openNewestHostedRoom(beforeMax, (tries || 0) + 1); }, 2000);
+    else showStatus("wait", "Room created but the new room is not visible yet. It will appear in Rooms you host below.");
   });
 }
 
@@ -3620,7 +3664,7 @@ function fetchTxRoomId(hash, accountId, n){
 }
 function openPendingRoom(hash, accountId){
   fetchTxRoomId(hash, accountId, 0).then(function(found){
-    if(!found) return;
+    if(!found){ showStatus("wait", "Transaction landed but I could not read it back. Find your room in Rooms you host below."); return; }
     if(!found.create) return;
     if(found.roomId !== null) openCreatedRoom(found.roomId);
     else openNewestHostedRoom(-1, 0);
