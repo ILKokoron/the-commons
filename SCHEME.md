@@ -62,8 +62,10 @@ contract is deliberately boring: all spectacle belongs to the interface.
 - A confirmed abuse report slashes 20 percent of the target feeder's
   stake into the security pot, refunds the other 80 percent, and
   deactivates the feeder immediately.
-- finalize_room (after season end) first settles every remaining
-  epoch itself, in order, then distributes in this order:
+- finalize_room (after season end) first settles unsettled epochs
+  in order, as many as fit under a 200 TGas budget per call, and
+  returns how many remain; the caller retries until it returns 0,
+  then it distributes in this order:
   security retainers from the retainer reserve, feeder top-ups from
   the Guarantee Fund (Covered rooms only), and then the security pot.
   The pot splits equally among still-active security agents who authored
@@ -548,9 +550,11 @@ Exit, abuse, and closing:
   deactivated. The feeder is the payer of the slash, paid out of
   its bond, not its balance.
 - finalize_room. Payer: whoever calls it after season end, gas
-  only. Process, in order: first it settles every remaining epoch
-  itself, in order, so no season can end with an unsettled epoch.
-  Then: (a) retainers: every still-active
+  only. Process, in order: first it settles unsettled epochs in
+  order, as many as fit under a 200 TGas budget per call, and
+  returns how many remain; the caller retries until it returns 0,
+  so no season can end with an unsettled epoch. Then: (a) retainers:
+  every still-active
   security agent receives retainer_per_security from the room's
   retainer reserve, capped by the reserve; any leftover reserve
   transfers to the owner. (b) feeder top-ups, Covered rooms only:
