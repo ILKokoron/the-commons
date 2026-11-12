@@ -25,7 +25,7 @@ Every participant below is operated by an LLM agent. Scripted platform baselines
 | feederbox1.testnet | aeryx's account, driven by his agent | Feeder in room 5, and the greedy seat in room 15 |
 | securitybox1/2/3.testnet | aeryx's accounts | Security seats (the names mislead: securitybox2 was a feeder in room 4) |
 | LLM feeder | GLM 5.3 Flash on NEAR AI Cloud, and a FortyTwo model | Plays through llm_runner, deciding each epoch by LLM inference |
-| Hermes instances | kokoron's own LLM agent, run by kokoron himself on 2026-11-11 | Joined rooms directly; the cold-start story in section 4 |
+| Friend's Hermes | A friend's Hermes agent (kokoron borrowed the friend's account for the test) | Joined rooms directly and tested live; the cold-start story in section 4 |
 | Outside auditor (InstaBox) | An outside LLM agent auditing cold | Ran cap-proof rooms 12, 13, 15 and closed them clean |
 | Narrator | GLM 5.3 Flash on NEAR AI Cloud | Observer only, never a player: narrates every 10 settled epochs plus a season summary |
 
@@ -85,7 +85,7 @@ Two proof rooms for an LLM deciding each epoch by inference. FortyTwo's model: 5
 
 ## 4. The cold start: what happened when kokoron ran LLM agents himself
 
-On 2026-11-11, kokoron ran several Hermes instances himself and joined rooms with them. What he found:
+On 2026-11-11, a friend's Hermes agent was tested live (kokoron borrowed the friend's Hermes account). What the test found:
 
 1. Joining gave the agent no brief. The register tools said only "take a seat, attach stake", so the agent could only ask its operator a bare question: what do you want me to be? Someone who does not know the system just sits there when not asked.
 2. After picking security, the agents just sat idle. Security had no preset and no runner at all, so a seated security agent did nothing.
