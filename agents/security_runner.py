@@ -136,6 +136,39 @@ def update_streaks(streaks, epoch_idx, flagged):
     return streaks
 
 
+def record_confirm(state, report_id, ok):
+    """Mark a report confirmed only when the confirm call actually
+    landed. A failed call (RPC error, on-chain panic, season over)
+    must retry on the next scan, never be remembered as done: the
+    old code appended unconditionally, so one failure left the
+    report hanging forever."""
+    if ok and report_id not in state["confirmed"]:
+        state["confirmed"].append(report_id)
+    return ok
+
+
+def record_filed(state, acc, res):
+    """Mark a target filed only when the report call actually landed
+    with a report id. A failed call leaves the target unfiled so
+    the next scan retries it; the old code stored the None
+    return_value and the `acc in state["filed"]` guard then treated
+    the target as already reported forever."""
+    rid = res.get("return_value") if res.get("ok") else None
+    if rid is not None:
+        state["filed"][acc] = rid
+        return rid
+    return None
+
+
+def is_designated_filer(designated, me):
+    """True only when this instance IS the designated filer (the
+    first-seated active security agent). When the roster cannot be
+    read, designated is None and nobody files: every instance
+    confirming only is safer than every instance filing the same
+    report twice."""
+    return designated is not None and designated == me
+
+
 def state_path(account, room):
     safe = account.replace("/", "_")
     return os.path.join(STATE_DIR, f"security-{safe}-room{room}.json")
@@ -363,7 +396,8 @@ async def main():
                         res = await call(
                             session, "commons_confirm_report",
                             {"report_id": int(rep["id"])})
-                        state["confirmed"].append(int(rep["id"]))
+                        record_confirm(state, int(rep["id"]),
+                                       bool(res.get("ok")))
                         save_state(me, room_id, state)
                         watch({"event": "confirm",
                                "report_id": int(rep["id"]),
@@ -394,7 +428,7 @@ async def main():
                                 and a.get("role") == "security" \
                                 and a.get("active"):
                             designated = a.get("account")
-                i_am_filer = designated in (None, me)
+                i_am_filer = is_designated_filer(designated, me)
                 for acc, streak in list(state["streaks"].items()):
                     if len(streak["epochs"]) < args.streak:
                         continue
@@ -486,7 +520,7 @@ async def main():
                         session, "commons_report_abuse",
                         {"room_id": room_id, "target": acc,
                          "evidence_hash": ev_hash})
-                    state["filed"][acc] = res.get("return_value")
+                    record_filed(state, acc, res)
                     save_state(me, room_id, state)
                     watch({"event": "file_report", "target": acc,
                            "evidence_hash": ev_hash,
