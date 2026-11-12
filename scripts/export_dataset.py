@@ -59,7 +59,7 @@ def _registry_default_contract():
         with open(reg_path) as f:
             return json.load(f)["default"]
     except Exception:
-        return "commonsv5.bindingvow1106.testnet"
+        return "commonsv7.bindingvow1106.testnet"
 
 
 DEFAULT_CONTRACT = _registry_default_contract()
