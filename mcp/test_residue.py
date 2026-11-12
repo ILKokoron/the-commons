@@ -18,8 +18,15 @@ The claims under test:
   before the one-shot finalize call, so a room with many unsettled
   epochs does not revert on the 300 TGas cap; a failed pre-settle
   stops before any finalize is attempted; an already-ended room
-  and a mid-season room skip the pre-settle.
+  and a mid-season room skip the pre-settle. On the current
+  contract (v8) finalize_room returns the remaining unsettled
+  epoch count: when it comes back above 0 the server settles more
+  and retries until it is 0, and reports finalize_remaining.
+- The commitment format is the v8 length-prefixed preimage
+  ("amount|len(rh)|rh|len(salt)|salt"); the old plain format
+  would make every v8 reveal fail with a commitment mismatch.
 """
+import hashlib
 import os
 import sys
 
@@ -50,13 +57,26 @@ try:
 except ValueError as e:
     assert "empty amount" in str(e)
 
+# --- _commitment: v8 length-prefixed preimage ---
+assert server._commitment(100, "ab", "c|d") == hashlib.sha256(
+    b"100|2|ab|3|c|d").hexdigest()
+# The v8 collision case from the contract tests: the two pairs
+# differ, so their commitments must differ too (the old plain
+# format hashed both to the same preimage "100|ab|c|d").
+assert server._commitment(100, "ab", "c|d") != server._commitment(
+    100, "ab|c", "d")
+# And it is not the old format.
+assert server._commitment(100, "ab", "c|d") != hashlib.sha256(
+    b"100|ab|c|d").hexdigest()
+
 # --- commons_finalize_room pre-settle (mocked chain) ---
 _orig_view = server.view
 _orig_call = server.near_call
 _orig_settle = server.commons_settle_room
 
 
-def _run_case(room_ended, season_over, settle_script, call_ok=True):
+def _run_case(room_ended, season_over, settle_script, call_ok=True,
+              finalize_returns=None):
     calls = {"settle": 0, "finalize": 0}
     ended = {"v": room_ended}
 
@@ -78,7 +98,11 @@ def _run_case(room_ended, season_over, settle_script, call_ok=True):
         calls["finalize"] += 1
         ended["v"] = True
         if call_ok:
-            return {"ok": True, "tx_id": "fake-tx"}
+            out = {"ok": True, "tx_id": "fake-tx"}
+            if finalize_returns is not None:
+                out["return_value"] = finalize_returns[
+                    calls["finalize"] - 1]
+            return out
         return {"ok": False, "error": "season not over"}
 
     server.view = fake_view
@@ -120,5 +144,39 @@ assert calls == {"settle": 0, "finalize": 1}
 res, calls = _run_case(False, False, [], call_ok=False)
 assert res["ok"] is False
 assert calls == {"settle": 0, "finalize": 1}
+
+# v8: first finalize reports 2 epochs still unsettled; the server
+# settles them and retries, second finalize reports 0.
+res, calls = _run_case(
+    False, True,
+    [{"ok": True, "settled": [0, 1]}, {"ok": True, "settled": []},
+     {"ok": True, "settled": [2, 3]}],
+    finalize_returns=[2, 0])
+assert res["ok"] is True
+assert res["finalize_remaining"] == 0
+assert res["pre_settled"] == [0, 1, 2, 3]
+assert res["pre_settled_count"] == 4
+assert calls == {"settle": 3, "finalize": 2}
+
+# v8: finalize reports 2 left but no epoch is due for settlement;
+# a clear error, not an endless retry loop.
+res, calls = _run_case(
+    False, True,
+    [{"ok": True, "settled": [0, 1]}, {"ok": True, "settled": []},
+     {"ok": True, "settled": []}],
+    finalize_returns=[2])
+assert res["ok"] is False
+assert res["finalize_remaining"] == 2
+assert "2 unsettled epochs" in res["error"]
+assert calls == {"settle": 3, "finalize": 1}
+
+# Older contract (unit return, no return_value): finalize_remaining
+# is None and no retry is attempted.
+res, calls = _run_case(
+    False, True,
+    [{"ok": True, "settled": [0, 1]}, {"ok": True, "settled": []}])
+assert res["ok"] is True
+assert res["finalize_remaining"] is None
+assert calls == {"settle": 2, "finalize": 1}
 
 print("residue tests passed")
