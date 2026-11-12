@@ -23,6 +23,7 @@ const CONTRACTS = new Set([
   "commonsv5.bindingvow1106.testnet",
   "commonsv6.bindingvow1106.testnet",
   "commonsv7.bindingvow1106.testnet",
+  "commonsv8.bindingvow1106.testnet",
 ]);
 
 export default async function handler(req, res) {
