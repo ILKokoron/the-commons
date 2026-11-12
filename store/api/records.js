@@ -1,4 +1,16 @@
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
+
+// Compare an Authorization header against a token in constant
+// time: hash both sides first so timingSafeEqual never sees
+// different lengths (it throws on them) and the comparison leaks
+// nothing about where the two differ. A plain === leaks the
+// comparison through timing.
+function tokensEqual(header, token) {
+  if (!header || !token) return false;
+  const a = createHash("sha256").update(header).digest();
+  const b = createHash("sha256").update(`Bearer ${token}`).digest();
+  return timingSafeEqual(a, b);
+}
 
 // POST /api/records
 // Body: the canonical reasoning record bytes (a JSON object).
@@ -35,7 +47,7 @@ export default async function handler(req, res) {
     return;
   }
   const token = process.env.STORE_WRITE_TOKEN;
-  if (!token || req.headers.authorization !== `Bearer ${token}`) {
+  if (!tokensEqual(req.headers.authorization, token)) {
     res.status(401).json({ ok: false, error: "bad write token" });
     return;
   }
