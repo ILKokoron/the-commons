@@ -11,8 +11,8 @@ Configuration comes from the environment:
   COMMONS_CONTRACT     contract account. The default comes from
                        the shared registry in contracts.json and is
                        the current contract,
-                       commonsv7.bindingvow1106.testnet. Naming a
-                       known-old contract (v1 to v6) makes the server
+                       commonsv8.bindingvow1106.testnet. Naming a
+                       known-old contract (v1 to v7) makes the server
                        refuse to start, because those contracts are
                        history, watchable through the webapp and the
                        exporter but no longer operated; set
@@ -90,7 +90,7 @@ def _load_registry():
             return json.load(f)
     except Exception:
         return {
-            "default": "commonsv7.bindingvow1106.testnet",
+            "default": "commonsv8.bindingvow1106.testnet",
             "known_old": [
                 "commons.bindingvow1106.testnet",
                 "commonsv2.bindingvow1106.testnet",
@@ -98,6 +98,7 @@ def _load_registry():
                 "commonsv4.bindingvow1106.testnet",
                 "commonsv5.bindingvow1106.testnet",
                 "commonsv6.bindingvow1106.testnet",
+                "commonsv7.bindingvow1106.testnet",
             ],
             "contracts": {
                 "v1": "commons.bindingvow1106.testnet",
@@ -107,6 +108,7 @@ def _load_registry():
                 "v5": "commonsv5.bindingvow1106.testnet",
                 "v6": "commonsv6.bindingvow1106.testnet",
                 "v7": "commonsv7.bindingvow1106.testnet",
+                "v8": "commonsv8.bindingvow1106.testnet",
             },
             "store_url":
                 "https://the-commons-store-ilkokorons-projects.vercel.app",
@@ -116,7 +118,7 @@ def _load_registry():
 REGISTRY = _load_registry()
 ACCOUNT = os.environ.get("COMMONS_ACCOUNT_ID", "")
 CONTRACT = os.environ.get("COMMONS_CONTRACT", "") \
-    or REGISTRY.get("default", "commonsv7.bindingvow1106.testnet")
+    or REGISTRY.get("default", "commonsv8.bindingvow1106.testnet")
 CONTRACT_IS_OLD = CONTRACT in REGISTRY.get("known_old", [])
 NETWORK = os.environ.get("COMMONS_NETWORK", "testnet")
 
@@ -131,7 +133,7 @@ def _contract_flavor():
 
     The version comes from the shared registry's contracts map,
     never from splitting the account name. For a contract the
-    registry does not know, probe for a v7-only view first
+    registry does not know, probe for a v7-and-later view first
     (get_solvency); only if that fails fall back to a get_config
     probe: a config carrying gas_per_epoch is v4-class; anything
     else is treated as v1-class. The config probe cannot tell v5
@@ -702,6 +704,21 @@ def near_call(fn, args, deposit_yocto=0):
 
 def err(msg):
     return {"ok": False, "error": msg}
+
+
+def _commitment(amount_yocto, reasoning_hash, salt):
+    """The commit commitment, in exactly the format the contract's
+    commitment_for recomputes at reveal time. v8 length-prefixes
+    the string fields ("amount|len(rh)|rh|len(salt)|salt") so the
+    preimage is unambiguous; the old "{amount}|{rh}|{salt}" format
+    let two different (reasoning_hash, salt) pairs collide and
+    every v8 reveal would fail with a commitment mismatch.
+    reasoning_hash and salt are ASCII hex strings, so Python len()
+    matches Rust .len()."""
+    return hashlib.sha256(
+        f"{amount_yocto}|{len(reasoning_hash)}|{reasoning_hash}"
+        f"|{len(salt)}|{salt}".encode()
+    ).hexdigest()
 
 
 def _store_upload(canonical, expected_hash):
@@ -1558,9 +1575,7 @@ def commons_commit(
                     "is published to the store."
                 )
         salt = secrets.token_hex(16)
-        commitment = hashlib.sha256(
-            f"{amount_y}|{reasoning_hash}|{salt}".encode()
-        ).hexdigest()
+        commitment = _commitment(amount_y, reasoning_hash, salt)
     except Exception as e:
         return err(f"commit preparation failed: {e}")
     # Margin recheck (B4): the phase margin was first checked
@@ -1724,8 +1739,7 @@ def commons_reveal(
                 amount_y = to_yocto(amount)
         except Exception:
             return err(f"unparseable amount: {amount!r}")
-        commitment = hashlib.sha256(
-            f"{amount_y}|{reasoning_hash}|{salt}".encode()).hexdigest()
+        commitment = _commitment(amount_y, reasoning_hash, salt)
         if pending is not None and pending.get("commitment") != commitment:
             return err("explicit reveal data does not reproduce the "
                        "commitment stored for this epoch; refusing to "
@@ -1897,7 +1911,13 @@ def commons_finalize_room(room_id: int) -> dict:
     reported, and their settle gas is the caller's: a room nobody
     kept is more expensive to close than one a keeper settled as it
     ran, and that cost is visible here instead of hidden in a
-    revert. A mid-season finalize skips the pre-settle and fails
+    revert. On the current contract (v8) finalize_room returns the
+    remaining unsettled epoch count (u64; 0 means finalized), which
+    is reported as finalize_remaining. When it comes back above 0
+    (epochs became due between the pre-settle and the finalize, or
+    the finalize's own settle hit the gas cap), more epochs are
+    settled and finalize is retried until remaining is 0. A
+    mid-season finalize skips the pre-settle and fails
     exactly as before (the contract refuses it until the season
     ends)."""
     pre_settled = []
@@ -1933,6 +1953,55 @@ def commons_finalize_room(room_id: int) -> dict:
         res["pre_settled_count"] = len(pre_settled)
     if not res["ok"]:
         return res
+    # v8 finalize_room returns the remaining unsettled epoch count.
+    # Older contracts return unit, so a missing return value means
+    # the count is unknown and no retry is attempted.
+    remaining = res.get("return_value")
+    res["finalize_remaining"] = remaining \
+        if isinstance(remaining, int) else None
+    attempts = 0
+    while isinstance(remaining, int) and remaining > 0:
+        attempts += 1
+        if attempts > 10:
+            res["ok"] = False
+            res["verified"] = False
+            res["error"] = (
+                f"finalize still reports {remaining} unsettled "
+                "epochs after 10 settle-and-retry rounds; the room "
+                "is not finalized")
+            return res
+        try:
+            s = commons_settle_room(room_id, max_epochs=100)
+        except Exception as e:
+            res["ok"] = False
+            res["verified"] = False
+            res["error"] = f"finalize retry settle failed: {e}"
+            return res
+        pre_settled.extend(s.get("settled") or [])
+        if not s.get("ok"):
+            out = dict(s)
+            out["pre_settled"] = pre_settled
+            out["pre_settled_count"] = len(pre_settled)
+            out["finalize_remaining"] = remaining
+            out["step"] = "finalize-retry-settle"
+            return out
+        if not s.get("settled"):
+            res["ok"] = False
+            res["verified"] = False
+            res["error"] = (
+                f"finalize reports {remaining} unsettled epochs "
+                "but no epoch is due for settlement; the room is "
+                "not finalized")
+            return res
+        res = near_call("finalize_room", {"room_id": room_id})
+        if pre_settled:
+            res["pre_settled"] = pre_settled
+            res["pre_settled_count"] = len(pre_settled)
+        if not res["ok"]:
+            return res
+        remaining = res.get("return_value")
+        res["finalize_remaining"] = remaining \
+            if isinstance(remaining, int) else None
     try:
         room = view("get_room", {"room_id": room_id})
         res["room"] = room
