@@ -50,6 +50,10 @@ Its duty loop, once per poll:
   first-seated active security agent in the room's roster;
   every other instance only confirms, so a room never gets
   duplicate reports from preset instances running side by side.
+  A confirm or report call that fails is not recorded as done:
+  it retries on the next scan. When the roster cannot be read,
+  no instance files (every instance confirms only) rather than
+  every instance filing duplicates.
   The designated filer files an abuse report only for the one
   claim class that is fully recomputable from public records:
   persistent extreme over-request, a feeder requesting at least
