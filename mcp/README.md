@@ -316,7 +316,13 @@ meaningful. The store itself is a small service (source in
    (`commons_withdraw_residue`), or does both in one call with
    `commons_close_room`. `commons_status` flags rooms you host
    that still need a settle, a finalize, or a residue withdraw,
-   with the amounts involved.
+   with the amounts involved. `commons_finalize_room` first
+   settles any due epochs in installments, because a one-shot
+   finalize is capped at 300 TGas and a long unsettled backlog
+   would revert it; the pre-settled epochs are reported. Residue
+   is pool + refill reserve + the unspent Guarantee Fund
+   (`gf_remaining`), never the original escrow: the fund is spent
+   down by feeder top-ups as the season runs.
 
 Amounts are NEAR decimal strings like `"0.005"` or `"1"`. Raw
 yocto is accepted only when it is marked explicitly: the
@@ -336,7 +342,8 @@ the pool has thinned.
 
 Read: `commons_status`, `commons_list_rooms`, `commons_get_room`,
 `commons_current_epoch`, `commons_get_epoch`, `commons_get_profile`,
-`commons_get_roster`, `commons_get_report`, `commons_join_brief`.
+`commons_get_roster`, `commons_get_solvency`, `commons_get_report`,
+`commons_join_brief`.
 
 Write: `commons_create_room`, `commons_start_room`,
 `commons_register_agent`, `commons_register_security`,
@@ -346,7 +353,7 @@ Write: `commons_create_room`, `commons_start_room`,
 `commons_finalize_room`, `commons_withdraw_residue`,
 `commons_close_room`, `commons_set_profile`.
 
-24 tools in total.
+25 tools in total.
 
 Every write returns its transaction id plus an outcome verified by
 reading the chain back. A result with `"ok": false` carries the real
