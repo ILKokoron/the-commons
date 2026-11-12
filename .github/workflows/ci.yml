@@ -14,10 +14,10 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - name: Contract unit tests
-        working-directory: contract-v7
+        working-directory: contract-v8
         run: cargo test
       - name: Build the contract wasm
-        working-directory: contract-v7
+        working-directory: contract-v8
         run: cargo build --release --target wasm32-unknown-unknown
 
   python:
