@@ -3188,6 +3188,7 @@ function parseIntField(str, min, max){
 
 /* ---------- wallet (selector setup reused from the Binding Vow frontend; the retiring wallet module is deliberately not included) ---------- */
 var selector = null, modal = null, accountId = null;
+var pendingRoomOpenHash = null;
 var cachedWallet = null;
 var lastArgs = null, lastDeposit = null;
 function paintWallet(){
@@ -3206,6 +3207,13 @@ function paintWallet(){
   refreshCreateState();
   if(accountId) loadMyRooms();
   else document.getElementById("myRooms").innerHTML = "<p class='muted'>Connect your wallet to see the rooms hosted by your account.</p>";
+  /* A redirect wallet returns here after signing: the session is back,
+     so a create that was waiting on its hash can finally open the room. */
+  if(accountId && pendingRoomOpenHash){
+    var h = pendingRoomOpenHash;
+    pendingRoomOpenHash = null;
+    openPendingRoom(h, accountId);
+  }
 }
 async function ensureSelector(){
   if(selector) return selector;
@@ -3571,7 +3579,10 @@ function openCreatedRoom(chainId){
   }).catch(function(){});
 }
 function openNewestHostedRoom(beforeMax, tries){
-  if(beforeMax < 0) return;
+  /* beforeMax -1 means no baseline (a redirect reload starts with an
+     empty room list): the newest room hosted by this account is still
+     the one just created, since room ids are sequential and this call
+     only ever runs right after a create. */
   listAllRooms(S7).then(function(rows){
     var newest = null;
     (rows || []).forEach(function(r){
@@ -3581,6 +3592,38 @@ function openNewestHostedRoom(beforeMax, tries){
     else if((tries || 0) < 2) setTimeout(function(){ openNewestHostedRoom(beforeMax, (tries || 0) + 1); }, 2000);
   }).catch(function(){
     if((tries || 0) < 2) setTimeout(function(){ openNewestHostedRoom(beforeMax, (tries || 0) + 1); }, 2000);
+  });
+}
+
+/* A redirect wallet never resolves the create promise in-page: the page
+   reloads and only the transaction hash survives in the URL. Resolve the
+   room id from that transaction instead: the tx outcome carries the
+   create_room return value, the same value roomIdFromResult parses.
+   The method name is checked first so a Start/Cancel/Withdraw/Finalize
+   redirect never opens a room by mistake. Returns {create, roomId}
+   (roomId null when the create landed but the return value is
+   unreadable) or null when the tx cannot be read at all. */
+function fetchTxRoomId(hash, accountId, n){
+  var url = RPCS[n % RPCS.length];
+  var body = JSON.stringify({jsonrpc:"2.0", id:"tx-open", method:"tx", params:[hash, accountId]});
+  return fetchTO(url, body, function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }).then(function(d){
+    var res = d && d.result;
+    if(!res) throw new Error("no tx result");
+    var acts = res.transaction && res.transaction.actions;
+    var fn = acts && acts[0] && acts[0].FunctionCall && acts[0].FunctionCall.method_name;
+    if(fn !== "create_room") return {create:false, roomId:null};
+    return {create:true, roomId: roomIdFromResult(res)};
+  }).catch(function(){
+    if(n >= 2) return null;
+    return new Promise(function(res2){ setTimeout(res2, 1500); }).then(function(){ return fetchTxRoomId(hash, accountId, n + 1); });
+  });
+}
+function openPendingRoom(hash, accountId){
+  fetchTxRoomId(hash, accountId, 0).then(function(found){
+    if(!found) return;
+    if(!found.create) return;
+    if(found.roomId !== null) openCreatedRoom(found.roomId);
+    else openNewestHostedRoom(-1, 0);
   });
 }
 
@@ -3776,7 +3819,8 @@ function loadMyRooms(){
   if(err){
     showStatus("err", "The wallet reported an error: " + decodeURIComponent(err));
   }else if(hashes){
-    showStatus("ok", "Transaction submitted: " + hashes.split(",")[0] + ". Your rooms list will reflect it once the chain settles.");
+    pendingRoomOpenHash = hashes.split(",")[0];
+    showStatus("ok", "Transaction submitted: " + pendingRoomOpenHash + ". Opening your room once the chain settles…");
   }
   if(hashes || err){
     try{ history.replaceState(null, "", window.location.pathname); }catch(e){}
