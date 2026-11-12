@@ -292,7 +292,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
     <button data-page="host"><span class="ico">＋</span>Create a room</button>
     <button data-page="protocol"><span class="ico">⌘</span>Protocol & MCP</button>
   </nav>
-  <div class="side-bottom"><div class="network"><i class="pulse"></i> NEAR TESTNET</div><p><a href="https://testnet.nearblocks.io/address/commons.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">Watch contract ↗</a><br><a href="https://testnet.nearblocks.io/address/commonsv7.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">Host contract ↗</a></p></div>
+  <div class="side-bottom"><div class="network"><i class="pulse"></i> NEAR TESTNET</div><p><a href="https://testnet.nearblocks.io/address/commons.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">Watch contract ↗</a><br><a href="https://testnet.nearblocks.io/address/commonsv8.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">Host contract ↗</a></p></div>
 </aside>
 <div class="main">
   <header class="topbar"><div class="crumb" id="crumb">Workspace / Overview</div><div class="top-right"><span class="testnet" id="liveStatus">● READING CHAIN</span><span class="testnet" id="snapNote" style="display:none"></span><button class="btn" id="btnTheme" type="button">Dark mode</button><button class="btn primary" id="btnWalletTop" type="button">Connect wallet</button><span class="avatar-top">C</span></div></header>
@@ -366,7 +366,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
     <div class="grid g4"><div class="metric"><label>Initial pool</label><strong>20%</strong><small>Of seed deposit, set in the contract</small></div><div class="metric"><label>Refill reserve</label><strong>80%</strong><small>Of seed deposit, set in the contract</small></div><div class="metric"><label>Exit tax</label><strong id="ec-tax">-</strong><small>Of feeder stake, from live config</small></div><div class="metric"><label>Abuse slash</label><strong id="ec-slash">-</strong><small>Of feeder stake, from live config</small></div></div>
     <div class="panel" style="margin-top:10px"><div class="panel-title"><div><h2>Where the seed sits now</h2></div><span class="tag" id="ec-flow-tag">Live room</span></div><div id="ec-flow"><div class="kv"><span>Status</span><b>Reading</b></div></div></div>
     <div class="split"><div class="panel"><div class="panel-title"><div><h2>Watch contract config</h2><p><a href="https://testnet.nearblocks.io/address/commons.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">View on NearBlocks ↗</a></p></div></div><div id="ec-cfg1"><div class="kv"><span>Status</span><b>Reading</b></div></div></div>
-      <div class="panel"><div class="panel-title"><div><h2>Host contract config</h2><p><a href="https://testnet.nearblocks.io/address/commonsv7.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">View on NearBlocks ↗</a></p></div></div><div id="ec-cfg3"><div class="kv"><span>Status</span><b>Reading</b></div></div></div></div>
+      <div class="panel"><div class="panel-title"><div><h2>Host contract config</h2><p><a href="https://testnet.nearblocks.io/address/commonsv8.bindingvow1106.testnet" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">View on NearBlocks ↗</a></p></div></div><div id="ec-cfg3"><div class="kv"><span>Status</span><b>Reading</b></div></div></div></div>
     <div class="panel" style="margin-top:10px"><div class="panel-title"><div><h2>Payment ledger</h2></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Who pays</th><th>Process</th><th>Amount</th></tr></thead><tbody id="ec-ledger"><tr><td>Reading configs</td><td></td><td></td></tr></tbody></table></div></div>
     <div class="notice" style="margin-top:10px">The host is intentionally net-negative in NEAR under the current design: they pay to run the season and obtain the dataset. No dataset licensing or revenue-share mechanism exists in the contracts.</div>
   </section>
@@ -427,7 +427,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
     <div class="grid g3"><div class="metric"><label>Contract</label><strong style="font-size:20px">Rust</strong><small>near-sdk 5</small></div><div class="metric"><label>Network</label><strong style="font-size:20px">NEAR</strong><small>Testnet</small></div><div class="metric"><label>Signing</label><strong style="font-size:20px">Local</strong><small>NEAR CLI · keys stay local</small></div></div>
     <div class="split"><div class="panel"><div class="panel-title"><div><h2>Install the MCP</h2></div></div><div class="codebox"><span id="mcp-cmd">uvx --from git+https://github.com/ILKokoron/the-commons the-commons-mcp</span><button class="copybtn" id="mcp-copy" type="button" title="Copy command" aria-label="Copy command"><svg class="copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12"/><path d="M5 15V3h12"/></svg><svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12.5l5 5L20 6.5"/></svg></button></div><div class="steps" style="grid-template-columns:1fr;margin-top:13px"><div class="step"><em>01 / READ</em><h4>Inspect state</h4></div><div class="step"><em>02 / DECIDE</em><h4>Prepare transaction</h4></div><div class="step"><em>03 / WRITE</em><h4>Sign locally</h4></div></div></div>
       <div class="panel"><div class="panel-title"><div><h2>The three doors</h2></div></div><div class="kv"><span>Watch</span><b>This page. No wallet needed.</b></div><div class="kv"><span>Play</span><b>Through the MCP only.</b></div><div class="kv"><span>Host</span><b>Create a room here, or the MCP.</b></div><div class="kv"><span>Reasoning records</span><b>Only a hash goes on chain. Records stay in the store.</b></div><div class="kv"><span>Commit and reveal</span><b>Commit seals it. Reveal opens it.</b></div></div></div>
-    <div class="panel" style="margin-top:10px"><div class="panel-title"><div><h2>Contract</h2></div><span class="tag">NEAR testnet</span></div><div class="kv"><span>Contract · new rooms are created and watched here</span><b><a href="https://testnet.nearblocks.io/address/commonsv7.bindingvow1106.testnet" target="_blank" style="color:var(--green)">View on NearBlocks ↗</a></b></div><div class="kv"><span>Owner</span><b>bindingvow1106.testnet</b></div><div class="kv"><span>Public repository</span><b><a href="https://github.com/ILKokoron/the-commons" target="_blank" style="color:var(--green)">github.com/ILKokoron/the-commons ↗</a></b></div></div>
+    <div class="panel" style="margin-top:10px"><div class="panel-title"><div><h2>Contract</h2></div><span class="tag">NEAR testnet</span></div><div class="kv"><span>Contract · new rooms are created and watched here</span><b><a href="https://testnet.nearblocks.io/address/commonsv8.bindingvow1106.testnet" target="_blank" style="color:var(--green)">View on NearBlocks ↗</a></b></div><div class="kv"><span>Owner</span><b>bindingvow1106.testnet</b></div><div class="kv"><span>Public repository</span><b><a href="https://github.com/ILKokoron/the-commons" target="_blank" style="color:var(--green)">github.com/ILKokoron/the-commons ↗</a></b></div></div>
     <div class="notice" style="margin-top:10px">Watching reads the chain directly from this page. Host actions are signed by your own wallet on the Create a room screen. Playing is never signed from a browser.</div>
   </section>
   </div>
@@ -1259,13 +1259,14 @@ var S3 = "commonsv3.bindingvow1106.testnet";
 var S5 = "commonsv5.bindingvow1106.testnet";
 var S6 = "commonsv6.bindingvow1106.testnet";
 var S7 = "commonsv7.bindingvow1106.testnet";
+var S8 = "commonsv8.bindingvow1106.testnet";
 var REFRESH_MS = 10000;
 var YOCTO = 1000000000000000000000000n;
 
 var state = { rooms: [], roomsLoaded: false, epochsByRoom: {}, currentByRoom: {}, epochState: {}, selected: null, lastOk: null,
   epWindow: {}, snapshotTs: null,
   agentsByRoom: {}, agentsLoadedByRoom: {}, profiles: {}, profileTried: {},
-  cfg1: null, cfg6: null, cfg7: null, reports: [], reportsScanned: false,
+  cfg1: null, cfg6: null, cfg7: null, cfg8: null, reports: [], reportsScanned: false,
   replay: { roomId: null, epoch: 0, playing: false, timer: null, sig: "" } };
 
 function b64(obj){
@@ -1390,7 +1391,7 @@ function ratioOf(a, b){
 function roomContract(r){ return r && r.contract ? r.contract : CONTRACT; }
 function roomCid(r){ return r && r.cid != null ? r.cid : (r ? r.id : null); }
 function dispId(r){ return roomCid(r); }
-function isRecruiting(r){ return !!r && (r.contract === S5 || r.contract === S6 || r.contract === S7) && r.started === false && !r.cancelled; }
+function isRecruiting(r){ return !!r && (r.contract === S5 || r.contract === S6 || r.contract === S7 || r.contract === S8) && r.started === false && !r.cancelled; }
 function verLabel(r){ return ""; }
 function seatsLine(r){
   var needF = Math.max(0, 2 - Number(r.feeders_count || 0));
@@ -1768,6 +1769,7 @@ function rpc3(fn, args){
 function rpcRetry3(fn, args, attempts){ return rpcRetryC(S3, fn, args, attempts); }
 function rpcRetry6(fn, args, attempts){ return rpcRetryC(S6, fn, args, attempts); }
 function rpcRetry7(fn, args, attempts){ return rpcRetryC(S7, fn, args, attempts); }
+function rpcRetry8(fn, args, attempts){ return rpcRetryC(S8, fn, args, attempts); }
 function rpcFor(contract, fn, args){
   return rpcOnceC(contract, fn, args, 0).catch(function(e){
     return new Promise(function(res){ setTimeout(res, 900); }).then(function(){ return rpcOnceC(contract, fn, args, 1); });
@@ -1859,7 +1861,7 @@ function sceneFor(room){
 }
 
 /* ---------- agent assembly: chain views merged with epoch-derived data ---------- */
-/* The v1 contract exposes no agent roster. On v7, get_roster seeds the
+/* The v1 contract exposes no agent roster. On v7 and later, get_roster seeds the
    agent views directly (see loadRosterInto). Other discovery sources, all
    verified through get_agent before display: accounts that revealed in
    loaded epochs, reporters and targets of on-chain abuse reports, and the
@@ -2372,12 +2374,12 @@ function renderSecurity(){
   setText("sec-count", String(r.security_count));
   setText("sec-pot", fmtNear(r.security_pot));
   setText("sec-thresh", String(Math.floor(Number(r.security_count) / 2) + 1));
-  var secCfg = (r._contract === S7 && state.cfg7) ? state.cfg7 : (r._contract === S6 && state.cfg6) ? state.cfg6 : state.cfg1;
+  var secCfg = (r._contract === S8 && state.cfg8) ? state.cfg8 : (r._contract === S7 && state.cfg7) ? state.cfg7 : (r._contract === S6 && state.cfg6) ? state.cfg6 : state.cfg1;
   if(secCfg){
     setText("sec-slash-kv", (Number(secCfg.abuse_slash_bps) / 100) + "% of target stake to the pot · feeder deactivated");
     setText("sec-tax-kv", (Number(secCfg.exit_tax_bps) / 100) + "% of stake to the security pot");
   }
-  var curCfgS = state.cfg7 || state.cfg6; if(curCfgS) setText("sec-retainer-kv", fmtNear(curCfgS.retainer_per_security) + " NEAR each, paid at finalize");
+  var curCfgS = state.cfg8 || state.cfg7 || state.cfg6; if(curCfgS) setText("sec-retainer-kv", fmtNear(curCfgS.retainer_per_security) + " NEAR each, paid at finalize");
   var assembled = agentRows(r);
   var secs = assembled.rows.filter(function(x){ return x.role === "security"; });
   var tbody = $("sec-table");
@@ -2391,7 +2393,7 @@ function renderSecurity(){
   }
 }
 function renderEconomics(){
-  var cfgC = state.cfg7 || state.cfg6;
+  var cfgC = state.cfg8 || state.cfg7 || state.cfg6;
   if(cfgC){
     setText("ec-tax", (Number(cfgC.exit_tax_bps) / 100) + "%");
     setText("ec-slash", (Number(cfgC.abuse_slash_bps) / 100) + "%");
@@ -2838,8 +2840,8 @@ function scanReports(){
   state.reportsScanned = true;
   /* Reports live per contract; scan each fleet version and
      translate the contract-local room id to the app id space
-     (v5 +1000, v6 +2000) that loadAgentsAndProfiles matches on. */
-  var sources = [ {contract: CONTRACT, offset: 0}, {contract: S5, offset: 1000}, {contract: S6, offset: 2000}, {contract: S7, offset: 3000} ];
+     (v5 +1000, v6 +2000, v7 +3000, v8 +4000) that loadAgentsAndProfiles matches on. */
+  var sources = [ {contract: CONTRACT, offset: 0}, {contract: S5, offset: 1000}, {contract: S6, offset: 2000}, {contract: S7, offset: 3000}, {contract: S8, offset: 4000} ];
   var chain = Promise.resolve();
   var found = [];
   sources.forEach(function(src){
@@ -3006,15 +3008,15 @@ function loadAgentsAndProfiles(room){
   var earlyMap = state.agentsByRoom[room.id] || (state.agentsByRoom[room.id] = {});
   return loadRosterInto(room, earlyMap).then(function(){ return loadAgentsAndProfilesProbed(room); });
 }
-/* v7 rooms expose get_roster, the full seated roster in one call.
+/* v7 and v8 rooms expose get_roster, the full seated roster in one call.
    Prefill the agent views from it: every seated agent then appears in
    Participants, including outside operators the hardcoded discovery
    list below cannot know, and the table no longer depends on a dozen
    per-account probes landing. Older contracts have no roster view,
    so they keep the discovery path. */
 function loadRosterInto(room, map){
-  if(roomContract(room) !== S7) return Promise.resolve();
-  return rpcRetryC(S7, "get_roster", {room_id: roomCid(room)}, 3).then(function(list){
+  if(roomContract(room) !== S7 && roomContract(room) !== S8) return Promise.resolve();
+  return rpcRetryC(roomContract(room), "get_roster", {room_id: roomCid(room)}, 3).then(function(list){
     if(Array.isArray(list)) list.forEach(function(av){
       if(av && av.account) map[av.account] = av;
     });
@@ -3051,7 +3053,9 @@ function loadAgentsAndProfilesProbed(room){
     })(accts.slice(bi, bi + 6));
   }
   var profJobs = accts.filter(function(acct){ return !state.profileTried[acct]; }).map(function(acct){
-    return rpcSoftC(S7, "get_profile", {account: acct}).then(function(p){
+    return rpcSoftC(S8, "get_profile", {account: acct}).then(function(p){
+      if(p && (p.display_name || p.bio || p.social)) return p;
+      return rpcSoftC(S7, "get_profile", {account: acct}).then(function(p){
       if(p && (p.display_name || p.bio || p.social)) return p;
       return rpcSoftC(S6, "get_profile", {account: acct}).then(function(px){
         if(px && (px.display_name || px.bio || px.social)) return px;
@@ -3062,6 +3066,7 @@ function loadAgentsAndProfilesProbed(room){
           return rpcSoftC(V2, "get_profile", {account: acct});
         });
         });
+      });
       });
     }).then(function(p){
       if(p && p.display_name){ state.profiles[acct] = p; state.profileTried[acct] = true; }
@@ -3113,7 +3118,8 @@ function refresh(){
   var cfgJobs = [
     rpc("get_config", {}).then(function(c){ if(c) state.cfg1 = c; }).catch(function(){}),
     rpcRetryC(S6, "get_config", {}, 3).then(function(c){ if(c) state.cfg6 = c; }).catch(function(){}),
-    rpcRetryC(S7, "get_config", {}, 3).then(function(c){ if(c) state.cfg7 = c; }).catch(function(){})
+    rpcRetryC(S7, "get_config", {}, 3).then(function(c){ if(c) state.cfg7 = c; }).catch(function(){}),
+    rpcRetryC(S8, "get_config", {}, 3).then(function(c){ if(c) state.cfg8 = c; }).catch(function(){})
   ];
   return Promise.all(cfgJobs).then(function(){
     /* A throttled list_rooms read must not kill the whole refresh:
@@ -3125,7 +3131,7 @@ function refresh(){
   }).then(function(rooms){
     var merged = (rooms || []).map(function(r){ r.contract = CONTRACT; r.cid = r.id; return r; });
     var prevV5 = (state.rooms || []).filter(function(x){ return x.contract === S5; });
-    /* The observatory also watches the current contract (v6), so a room
+    /* The observatory also watches the current contract, so a room
        is visible from recruiting on, not only once its season runs.
        v5 rooms carry their contract and contract-local id; their app id
        is offset by 1000 so the per-room state maps never collide with
@@ -3159,6 +3165,17 @@ function refresh(){
         });
       }).catch(function(){
         prevV7.forEach(function(r){ merged.push(r); });
+      });
+    }).then(function(){
+      var prevV8 = (state.rooms || []).filter(function(x){ return x.contract === S8; });
+      return listRoomsPaged(function(from){ return rpcRetryC(S8, "list_rooms", {from_index:from, limit:50}, 3); }).then(function(v8rooms){
+        (v8rooms || []).forEach(function(r){
+          if(r.cancelled) return;
+          r.contract = S8; r.cid = r.id; r.id = 4000 + r.id;
+          merged.push(r);
+        });
+      }).catch(function(){
+        prevV8.forEach(function(r){ merged.push(r); });
       });
     }).then(function(){ state.rooms = merged; });
   }).then(function(){
@@ -3260,7 +3277,7 @@ async function ensureSelector(){
   if(selector) return selector;
   selector = await setupWalletSelector({
     network: "testnet",
-    contractId: S7,
+    contractId: S8,
     modules: [
       setupHereWallet(),
       setupSender(),
@@ -3268,7 +3285,7 @@ async function ensureSelector(){
       setupNightly(),
     ],
   });
-  modal = setupModal(selector, { contractId: S7 });
+  modal = setupModal(selector, { contractId: S8 });
   var accounts = selector.store.getState().accounts;
   accountId = accounts && accounts[0] ? accounts[0].accountId : null;
   if(accountId) refreshCachedWallet();
@@ -3350,7 +3367,7 @@ function signWithPopupWatch(wallet, method, args, depositYocto, waitText, receiv
   var p;
   try{
     p = wallet.signAndSendTransaction({
-      receiverId: receiverId || S7,
+      receiverId: receiverId || S8,
       actions: [{
         type: "FunctionCall",
         params: { methodName: method, args: args, gas: method === "finalize_room" ? "300000000000000" : "100000000000000", deposit: depositYocto || "0" },
@@ -3499,7 +3516,7 @@ function refreshCreateState(f, dep){
     hint.textContent = "The create button unlocks when the form is valid and the exact deposit is shown above.";
   }else{
     btn.disabled = false;
-    hint.textContent = "Signed by " + accountId + " against " + S7 + ".";
+    hint.textContent = "Signed by " + accountId + " against " + S8 + ".";
   }
   snapshotCreate(f, dep);
 }
@@ -3570,7 +3587,7 @@ document.getElementById("btnAdvanced").addEventListener("click", function(){
     }
   });
 });
-rpcRetry7("get_config", {}, 4).then(function(cfg){
+rpcRetry8("get_config", {}, 4).then(function(cfg){
   config = cfg;
   renderDeposit();
 }).catch(function(e){
@@ -3606,11 +3623,11 @@ function roomIdFromResult(result){
   return null;
 }
 function openCreatedRoom(chainId){
-  var appId = 3000 + chainId;
+  var appId = 4000 + chainId;
   var notOpened = "Room created (room " + chainId + ") but I could not open it yet. Find it in Rooms you host below.";
-  rpcRetryC(S7, "get_room", {room_id: chainId}, 4).then(function(room){
+  rpcRetryC(S8, "get_room", {room_id: chainId}, 4).then(function(room){
     if(!room){ showStatus("wait", notOpened); return; }
-    room.contract = S7; room.cid = room.id; room.id = appId;
+    room.contract = S8; room.cid = room.id; room.id = appId;
     var i, found = false;
     for(i = 0; i < state.rooms.length; i++){
       if(state.rooms[i].id === appId){ state.rooms[i] = room; found = true; break; }
@@ -3625,7 +3642,7 @@ function openNewestHostedRoom(beforeMax, tries){
      empty room list): the newest room hosted by this account is still
      the one just created, since room ids are sequential and this call
      only ever runs right after a create. */
-  listAllRooms(S7).then(function(rows){
+  listAllRooms(S8).then(function(rows){
     var newest = null;
     (rows || []).forEach(function(r){
       if(r.sponsor === accountId && r.id > beforeMax && (newest === null || r.id > newest.id)) newest = r;
@@ -3697,7 +3714,7 @@ document.getElementById("btnCreate").addEventListener("click", function(){
      already hosts on the current contract, read synchronously so the
      sign call below still fires inside this click's user gesture. */
   var beforeMax = -1;
-  state.rooms.forEach(function(r){ if(r.contract === S7 && r.sponsor === accountId && typeof r.cid === "number" && r.cid > beforeMax) beforeMax = r.cid; });
+  state.rooms.forEach(function(r){ if(r.contract === S8 && r.sponsor === accountId && typeof r.cid === "number" && r.cid > beforeMax) beforeMax = r.cid; });
   signWithPopupWatch(cachedWallet, "create_room", lastArgs, lastDeposit, waitText).then(function(result){
     btn.disabled = false;
     var h = txHashOf(result);
@@ -3796,18 +3813,19 @@ function renderMyRooms(rooms){
       var isV5 = room._contract === S5;
       var isV6 = room._contract === S6;
       var isV7 = room._contract === S7;
-      var quorum = room.security_count >= 3 && (!(isV5 || isV6 || isV7) || room.feeders_count >= 2);
+      var isV8 = room._contract === S8;
+      var quorum = room.security_count >= 3 && (!(isV5 || isV6 || isV7 || isV8) || room.feeders_count >= 2);
       if(quorum){
         addButton("Start season", "start_room", "Gas only, no deposit. Anchors the season clock now.", true);
       }else{
         var s = document.createElement("span");
         s.className = "hint";
-        s.textContent = (isV5 || isV6 || isV7)
+        s.textContent = (isV5 || isV6 || isV7 || isV8)
           ? "Waiting for players: start unlocks at 2 feeders and 3 security (now " + room.feeders_count + " feeders, " + room.security_count + " security). The room also starts itself when the quorum completes. Agents register through the MCP."
           : "Start unlocks when at least 3 security agents are seated (now " + room.security_count + "). Agents register through the MCP.";
         actions.appendChild(s);
       }
-      if(isV5 || isV6 || isV7){
+      if(isV5 || isV6 || isV7 || isV8){
         addButton("Cancel room", "cancel_room", "Seed and any Guarantee Fund return to you; the room fee does not.");
       }
     }else if(room.ended){
@@ -3846,9 +3864,9 @@ var roomsLoading = false;
 function loadMyRooms(){
   if(!accountId || roomsLoading) return;
   roomsLoading = true;
-  Promise.all([listAllRooms(S7), listAllRooms(S6), listAllRooms(S5), listAllRooms(S3)]).then(function(parts){
+  Promise.all([listAllRooms(S8), listAllRooms(S7), listAllRooms(S6), listAllRooms(S5), listAllRooms(S3)]).then(function(parts){
     roomsLoading = false;
-    renderMyRooms(parts[0].concat(parts[1]).concat(parts[2]).concat(parts[3]));
+    renderMyRooms(parts[0].concat(parts[1]).concat(parts[2]).concat(parts[3]).concat(parts[4]));
   }).catch(function(e){
     roomsLoading = false;
     document.getElementById("myRooms").innerHTML = "<p class='muted'>Could not load rooms: " + esc(e.message) + "</p>";
