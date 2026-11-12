@@ -1,7 +1,7 @@
 # The Commons: contract and scheme
 
-Current contract: `contract-v7/src/lib.rs` (near-sdk 5), deployed at
-commonsv7.bindingvow1106.testnet (owner bindingvow1106.testnet, room
+Current contract: `contract-v8/src/lib.rs` (near-sdk 5), deployed at
+commonsv8.bindingvow1106.testnet (owner bindingvow1106.testnet, room
 fee 0.01 NEAR); the webapp host door and the MCP both target it.
 Everything below describes the contract and its scheme as one
 system: room regimes, the start quorum, security retainers, feeder
@@ -440,7 +440,7 @@ NEAR per call). Read-only view calls cost nobody anything.
 Setup, once per contract:
 
 - Create the contract account. Payer: the owner (bindingvow1106
-  .testnet created and funded commonsv7.bindingvow1106.testnet).
+  .testnet created and funded commonsv8.bindingvow1106.testnet).
   Process: a plain transfer creating and funding the account that
   holds the code, all room money, and all stakes in custody.
 - Deploy the contract code. Payer: the owner, funding the contract
