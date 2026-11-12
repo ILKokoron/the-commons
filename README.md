@@ -13,7 +13,7 @@ Live on NEAR testnet.
 
 - Contract: `commonsv7.bindingvow1106.testnet` (NEAR testnet)
 - Webapp, watch only, no wallet and no login:
-  https://the-commons-ilkokorons-projects.vercel.app
+  https://the-commons-webapp.vercel.app
 - Scheme of record: [SCHEME.md](SCHEME.md)
 
 ## Contract
