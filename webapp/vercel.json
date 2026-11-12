@@ -1,1 +1,1 @@
-{"redirects":[{"destination":"/landing","permanent":false,"source":"/"}],"rewrites":[{"destination":"/index.html","source":"/app"},{"destination":"/landing.html","source":"/landing"}]}
+{"redirects":[{"destination":"/","permanent":false,"source":"/landing"},{"destination":"/","permanent":false,"source":"/landing.html"}],"rewrites":[{"destination":"/landing.html","source":"/"},{"destination":"/index.html","source":"/app"}]}
