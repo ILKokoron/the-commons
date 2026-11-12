@@ -104,8 +104,8 @@ import { setupMeteorWallet } from "https://cdn.jsdelivr.net/npm/@near-wallet-sel
 import { setupNightly } from "https://cdn.jsdelivr.net/npm/@near-wallet-selector/nightly@8.9.3/+esm";
 
 "use strict";
-var PROFILE_CONTRACT = "commonsv7.bindingvow1106.testnet"; /* the onchain profile store lives here */
-var FLEET_CONTRACTS = ["commonsv7.bindingvow1106.testnet", "commonsv6.bindingvow1106.testnet", "commons.bindingvow1106.testnet"]; /* current fleet first, legacy v1 last */
+var PROFILE_CONTRACT = "commonsv8.bindingvow1106.testnet"; /* the onchain profile store lives here */
+var FLEET_CONTRACTS = ["commonsv8.bindingvow1106.testnet", "commonsv7.bindingvow1106.testnet", "commonsv6.bindingvow1106.testnet", "commons.bindingvow1106.testnet"]; /* current fleet first, legacy v1 last */
 var RPCS = ["https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org", "https://archival-rpc.testnet.near.org"];
 var YOCTO = 1000000000000000000000000n;
 
@@ -303,7 +303,7 @@ async function loadAccount(acct){
       document.getElementById("pNote").textContent = "No display profile is set for this account yet. Profiles are set through the MCP (commons_set_profile); this page only shows them and cannot create or edit one.";
     }
 
-    /* 2) memberships on the fleet contracts (v7 and v6 current, v1 legacy) */
+    /* 2) memberships on the fleet contracts (v8 current, v7, v6 and v1 legacy) */
     var rooms = await listAllRooms();
     var memberships = [];
     var agents = await mapBatch(rooms, 6, function(room){
