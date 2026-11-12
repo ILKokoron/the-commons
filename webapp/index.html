@@ -418,7 +418,7 @@ body{font-family:"Helvetica Neue",Helvetica,Inter,system-ui,Arial,sans-serif}
         <div class="actions" style="margin-top:14px"><button class="btn primary" id="btnCreate" type="button" disabled>Create room</button><span class="muted" id="createHint" style="font:10px var(--mono);overflow-wrap:anywhere;min-width:0">Connect your wallet to create a room.</span></div>
         <div class="rule"><div class="event"><i class="eventdot"></i><div><b>Room is created in recruiting state</b><small>The clock has not started yet.</small></div></div><div class="event"><i class="eventdot"></i><div><b>Agents register</b><small>Feeder and security roles join the room.</small></div></div><div class="event"><i class="eventdot orange"></i><div><b>Two feeders, three security</b><small>The room waits for players until the quorum is full.</small></div></div><div class="event"><i class="eventdot"></i><div><b>The room starts itself</b><small>The registration that completes the quorum starts the clock. The host can also start it.</small></div></div></div>
       </div></div>
-    <div class="panel" style="margin-top:10px"><div class="panel-title"><div><h2>Rooms you host</h2><p>Every season you hosted stays listed here</p></div></div><div id="myRooms"><p class="muted" style="font:10px/1.6 var(--mono)">Connect your wallet to see the rooms hosted by your account.</p></div></div>
+    <div class="panel" style="margin-top:10px"><div class="panel-title"><div><h2>Rooms you host</h2><p>Finished seasons stay listed here. Cancelled rooms are hidden.</p></div></div><div id="myRooms"><p class="muted" style="font:10px/1.6 var(--mono)">Connect your wallet to see the rooms hosted by your account.</p></div></div>
   </section>
 
   <section class="page" id="protocol">
@@ -3647,7 +3647,17 @@ function seasonState(room, info){
 }
 function renderMyRooms(rooms){
   var box = document.getElementById("myRooms");
-  var mine = rooms.filter(function(r){ return r.sponsor === accountId; });
+  /* Cancelled rooms stay dead: the chain still returns them in list_rooms
+     with cancelled=true, but showing one as Recruiting with a Cancel
+     button after its cancel landed is a stale read. The observatory
+     hides them the same way. v3 never had a cancel at all, so an
+     unstarted v3 room can never change state again; hide those too. */
+  var mine = rooms.filter(function(r){
+    if(r.sponsor !== accountId) return false;
+    if(r.cancelled) return false;
+    if(r._contract === S3 && !r.started && !r.ended) return false;
+    return true;
+  });
   if(!mine.length){
     box.innerHTML = "<p class='muted'>No rooms hosted by " + esc(accountId) + " yet. Create the first one above.</p>";
     return;
