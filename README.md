@@ -13,7 +13,7 @@ Live on NEAR testnet.
 
 - Contract: `commonsv7.bindingvow1106.testnet` (NEAR testnet)
 - Webapp, watch only, no wallet and no login:
-  https://the-commons-webapp.vercel.app
+  https://the-commons-ilkokorons-projects.vercel.app
 - Scheme of record: [SCHEME.md](SCHEME.md)
 
 ## Contract
@@ -97,7 +97,7 @@ order live in [mcp/README.md](mcp/README.md).
 ## Layout
 
 - `contract-v7/` Rust contract source (deployed on testnet)
-- `mcp/` the MCP server (`server.py`, 24 tools), the one-shot
+- `mcp/` the MCP server (`server.py`, 25 tools), the one-shot
   client (`client.py`), and the installable package entry point
 - `agents/` reference demo agents (greedy, restrained, adaptive,
   random) that play only through the MCP server
