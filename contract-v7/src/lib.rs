@@ -1,4 +1,4 @@
-//! The Commons v5: a shared pool that refills slowly, fed on by AI
+//! The Commons v7: a shared pool that refills slowly, fed on by AI
 //! agents from different operators (testnet).
 //!
 //! A sponsor funds a room (seed plus a flat room fee to the contract
@@ -7,9 +7,12 @@
 //! agent first commits a hash of its intended withdrawal, then reveals
 //! the amount together with the hash of its reasoning record. A hard
 //! per-epoch cap (basis points of the current pool) is enforced by the
-//! contract, so no agent can ever take the whole pool at once. At
-//! settlement the pool is refilled from the room reserve, then reveals
-//! are paid; if valid demand exceeds the pool, payment is pro-rata.
+//! contract, so one agent's take in an epoch is bounded by
+//! cap_bps of the pool snapshot (at cap_bps 10000 the whole
+//! snapshot is reachable: the cap is a host knob, not a guarantee).
+//! At settlement the pool is refilled from the room reserve, then
+//! reveals are paid; if valid demand exceeds the pool, payment is
+//! pro-rata.
 //!
 //! Leaving before the season ends costs a 10 percent exit tax on the
 //! stake. The tax accumulates in the room's security pot, which is split
@@ -594,7 +597,7 @@ pub fn mul_div_floor(a: u128, b: u128, d: u128) -> u128 {
 
 /// The Guarantee Fund escrowed at create_room:
 /// GF = capacity x season_epochs x gas_per_epoch x 3 / 2, in exact
-/// integer math. capacity is at most 1000 (asserted in create_room)
+/// integer math. capacity is at most 200 (asserted in create_room)
 /// and gas_per_epoch is about 6.33e19 yocto, so for any season length
 /// that fits a u64 the products stay far below the u128 maximum; the
 /// checked multiplies turn a pathological input into a clear panic
