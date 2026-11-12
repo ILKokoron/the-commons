@@ -17,7 +17,9 @@ const UPSTREAMS = [
 ];
 const CONTRACTS = new Set([
   "commons.bindingvow1106.testnet",
+  "commonsv2.bindingvow1106.testnet",
   "commonsv3.bindingvow1106.testnet",
+  "commonsv4.bindingvow1106.testnet",
   "commonsv5.bindingvow1106.testnet",
   "commonsv6.bindingvow1106.testnet",
   "commonsv7.bindingvow1106.testnet",
