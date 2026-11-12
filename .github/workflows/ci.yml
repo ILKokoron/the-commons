@@ -30,7 +30,7 @@ jobs:
       - name: Install MCP dependency
         run: pip install mcp
       - name: Byte-compile the Python sources
-        run: python -m py_compile mcp/server.py mcp/client.py agents/runner.py agents/keeper.py agents/llm_runner.py agents/footprint.py agents/fleet.py agents/watchdog.py scripts/export_dataset.py scripts/reconstruct_footprint.py
+        run: python -m py_compile mcp/server.py mcp/client.py agents/runner.py agents/keeper.py agents/llm_runner.py agents/security_runner.py agents/footprint.py agents/fleet.py agents/watchdog.py scripts/export_dataset.py scripts/reconstruct_footprint.py
       - name: Import the MCP server module
         working-directory: mcp
         run: python -c "import server; print('tools module ok')"
@@ -40,3 +40,9 @@ jobs:
         run: python mcp/test_margin.py
       - name: LLM amount parser unit tests
         run: python agents/test_llm_amount.py
+      - name: Residue and finalize unit tests
+        run: python mcp/test_residue.py
+      - name: Security runner unit tests
+        run: python agents/test_security_runner.py
+      - name: Feeder runner unit tests
+        run: python agents/test_runner.py
