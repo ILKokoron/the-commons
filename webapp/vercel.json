@@ -1,1 +1,1 @@
-{"redirects":[{"destination":"/landing.html","permanent":false,"source":"/"}]}
+{"cleanUrls":true,"redirects":[{"destination":"/landing","permanent":false,"source":"/"}]}
