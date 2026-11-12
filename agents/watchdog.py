@@ -21,8 +21,9 @@ health are checked per runner:
    runner is NOT relaunched; it is reported with one NOT-PLAYING
    line per runner, plus a dated copy in fleet-watchdog.log.
 
-The run also reads the v1 contract account balance and storage via
-RPC and raises ALARM-HEADROOM when the storage headroom drops
+The run also reads the contract's get_solvency view (falling back
+to the raw account balance and storage) via RPC and raises
+ALARM-HEADROOM when the storage headroom drops
 under a threshold (default 0.05 NEAR, env COMMONS_HEADROOM_ALARM_NEAR
 overrides it). At the measured growth of about 0.0395 NEAR of
 storage per settled epoch on a full 10-feeder room, 0.05 NEAR of
@@ -155,8 +156,27 @@ def get_epoch_secs():
 def get_headroom_near():
     """Contract storage headroom in NEAR, or None if RPC fails.
 
-    NEAR storage costs 10^19 yocto per byte, so headroom is the
-    balance left after paying for the storage already used."""
+    The honest number comes from the contract's get_solvency view:
+    balance minus storage cost minus everything the contract owes
+    (every room's pool, refill reserve, unspent Guarantee Fund,
+    security pot and retainer reserve, plus every active agent's
+    stake). The old formula used balance minus storage only, which
+    counts escrowed funds as free headroom and raises the alarm
+    late. Falls back to the old formula when the view is
+    unavailable (older contracts have no get_solvency)."""
+    args = base64.b64encode(json.dumps({}).encode()).decode()
+    result = rpc_query({
+        "request_type": "call_function",
+        "account_id": CONTRACT,
+        "method_name": "get_solvency",
+        "args_base64": args,
+        "finality": "final",
+    })
+    try:
+        solv = json.loads(bytes(result["result"]).decode())
+        return int(solv["headroom"]) / 10**24
+    except Exception:
+        pass
     result = rpc_query({
         "request_type": "view_account",
         "account_id": CONTRACT,
