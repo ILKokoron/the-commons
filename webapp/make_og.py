@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """Generate og.png (1200x630) for The Commons landing page.
 
-Layout follows kokoron's reference: paper background, serif wordmark + mono
-kicker under a hairline rule, big serif headline, one-line premise, bottom
-rule + closing line, and a pool diagram on the right: one central pool
-circle with wavy lines, ringed by 10 agent nodes, each a robot silhouette.
+A faithful copy of kokoron's reference layout (1733x907, scaled to 1200x630),
+with the colors swapped to the live site palette (landing.html :root):
+  reference cream (246,241,229) -> site bg #F7F8F9
+  reference ink                 -> site ink #0B0E14
+  reference olive pool          -> site accent blue #2F6DF6
+  reference hairlines           -> site line #D1D2D4
+Everything else (layout, type, diagram) follows the reference exactly:
+Didone serif (Noto Serif Display) for wordmark / headline / premise lines,
+letterspaced grotesque for the kicker, one pool ringed by 10 robot agents.
 
-Colors and accents match the live site (landing.html :root):
-  bg #F7F8F9, ink #0B0E14, hairline #D1D2D4, accent blue #2F6DF6.
-The pool circle and the second headline line carry the one blue accent.
-
-Rendering: everything is drawn at 4x (4800x2520) and downscaled with
-LANCZOS, so edges and text come out smooth instead of jagged.
+Rendering: drawn at 4x (4800x2520) and downscaled with LANCZOS, so edges
+and text come out smooth instead of jagged.
 """
 import math
 
@@ -19,18 +20,18 @@ from PIL import Image, ImageDraw, ImageFont
 
 OUT = "/home/hatch/workspace/the-commons/webapp/og.png"
 FD = "/usr/share/fonts/truetype/dejavu/"
+NOTO = "/usr/share/fonts/truetype/noto/"
 W, H = 1200, 630
 SS = 4  # supersample factor
 
 BG = (247, 248, 249)      # --bg
 INK = (11, 14, 20)        # --ink
-MUTED = (86, 96, 113)     # --muted
 LINE = (209, 210, 212)    # --line
 BLUE = (47, 109, 246)     # --blue
 WHITE = (255, 255, 255)
 FAINT = (233, 234, 236)   # faint arcs, one step darker than bg
 
-M = 56  # left/right margin
+M = 64  # left margin (reference wordmark starts here)
 
 
 def sc(v):
@@ -42,11 +43,15 @@ def pt(x, y):
     return (sc(x), sc(y))
 
 
-def font(name, size):
+def dfont(name, size):
     return ImageFont.truetype(FD + name, sc(size))
 
 
-def draw_spaced(d, xy, text, fnt, fill, spacing=3):
+def nfont(name, size):
+    return ImageFont.truetype(NOTO + name, sc(size))
+
+
+def draw_spaced(d, xy, text, fnt, fill, spacing=2):
     cx, cy = xy
     for ch in text:
         d.text((cx, cy), ch, font=fnt, fill=fill)
@@ -54,15 +59,15 @@ def draw_spaced(d, xy, text, fnt, fill, spacing=3):
     return cx
 
 
-def fit_size(d, text, name, start, max_w):
+def fit_size(d, text, name, start, max_w, noto=True):
     """Largest size <= start whose rendered width fits max_w."""
     size = start
     while size > 20:
-        f = font(name, size)
+        f = nfont(name, size) if noto else dfont(name, size)
         if d.textlength(text, font=f) <= sc(max_w):
             return f
         size -= 2
-    return font(name, size)
+    return (nfont(name, size) if noto else dfont(name, size))
 
 
 def wavy(d, cx, cy, half_w, amp, color, width=3):
@@ -115,43 +120,46 @@ img = Image.new("RGB", (W * SS, H * SS), BG)
 d = ImageDraw.Draw(img)
 
 # --- faint concentric arcs behind the diagram (reference texture) ---
-ACX, ACY = 1020, 320
-for r in (180, 230, 280):
+ACX, ACY = 924, 318
+for r in (190, 240, 290):
     d.ellipse([sc(ACX - r), sc(ACY - r), sc(ACX + r), sc(ACY + r)],
               outline=FAINT, width=SS)
 
-# --- header: wordmark + divider + kicker ---
-wm = font("DejaVuSerif-Bold.ttf", 38)
-d.text(pt(M, 46), "THE", font=wm, fill=INK)
-d.text(pt(M, 86), "COMMONS", font=wm, fill=INK)
-d.line([pt(300, 48), pt(300, 122)], fill=LINE, width=SS)
-draw_spaced(d, pt(322, 76), "LIVE EXPERIMENT · NEAR TESTNET",
-            font("DejaVuSansMono.ttf", 21), INK, spacing=3)
+# --- header: Didone wordmark + divider + letterspaced kicker ---
+wm_the = nfont("NotoSerifDisplay-Bold.ttf", 26)
+wm_com = nfont("NotoSerifDisplay-Bold.ttf", 48)
+d.text(pt(M, 54), "THE", font=wm_the, fill=INK)
+d.text(pt(M, 78), "COMMONS", font=wm_com, fill=INK)
+div_x = M + d.textlength("COMMONS", font=wm_com) / SS + 20
+d.line([pt(div_x, 54), pt(div_x, 112)], fill=LINE, width=SS)
+draw_spaced(d, pt(div_x + 20, 74), "LIVE EXPERIMENT · NEAR TESTNET",
+            dfont("DejaVuSans.ttf", 15), INK, spacing=2)
 
 # --- header rule ---
-d.line([pt(M, 142), pt(W - M, 142)], fill=LINE, width=SS)
+d.line([pt(M, 130), pt(W - M, 130)], fill=LINE, width=SS)
 
-# --- headline (serif, second line in the blue accent) ---
-head_w = 700
-tf1 = fit_size(d, "One pool. Ten agents.", "DejaVuSerif-Bold.ttf", 64, head_w)
-tf2 = fit_size(d, "No one in charge.", "DejaVuSerif-Bold.ttf", 64, head_w)
-d.text(pt(M, 196), "One pool. Ten agents.", font=tf1, fill=INK)
-d.text(pt(M, 276), "No one in charge.", font=tf2, fill=BLUE)
+# --- headline (Didone, all ink like the reference) ---
+head_w = 690
+tf1 = fit_size(d, "One pool. Ten agents.", "NotoSerifDisplay-Bold.ttf", 72, head_w)
+tf2 = fit_size(d, "No one in charge.", "NotoSerifDisplay-Bold.ttf", 72, head_w)
+d.text(pt(M, 222), "One pool. Ten agents.", font=tf1, fill=INK)
+d.text(pt(M, 322), "No one in charge.", font=tf2, fill=INK)
 
-# --- premise line ---
-sf = font("DejaVuSans.ttf", 26)
-d.text(pt(M, 388), "AI agents. One shared resource. No one in charge.",
+# --- premise line (Didone regular) ---
+sf = fit_size(d, "AI agents. One shared resource. No one in charge.",
+              "NotoSerifDisplay-Regular.ttf", 32, head_w)
+d.text(pt(M, 420), "AI agents. One shared resource. No one in charge.",
        font=sf, fill=INK)
 
 # --- bottom rule + closing line ---
-d.line([pt(M, 516), pt(W - M, 516)], fill=LINE, width=SS)
-bf = font("DejaVuSerif.ttf", 26)
-d.text(pt(M, 544), "A public experiment in how machines share.",
+d.line([pt(M, 524), pt(W - M, 524)], fill=LINE, width=SS)
+bf = nfont("NotoSerifDisplay-Regular.ttf", 28)
+d.text(pt(M, 552), "A public experiment in how machines share.",
        font=bf, fill=INK)
 
 # --- pool diagram: 10 robot agents around one pool ---
-PCX, PCY = 960, 330
-ORBIT, NODE_R, POOL_R = 145, 27, 60
+PCX, PCY = 924, 318
+ORBIT, NODE_R, POOL_R = 160, 19, 55
 
 # connectors first (circles drawn over them)
 for i in range(10):
@@ -165,9 +173,9 @@ d.ellipse([sc(PCX - POOL_R), sc(PCY - POOL_R),
            sc(PCX + POOL_R), sc(PCY + POOL_R)], fill=BLUE)
 d.ellipse([sc(PCX - POOL_R), sc(PCY - POOL_R),
            sc(PCX + POOL_R), sc(PCY + POOL_R)], outline=WHITE, width=2 * SS)
-wavy(d, PCX, PCY - 14, 30, 4, WHITE)
-wavy(d, PCX, PCY + 2, 30, 4, WHITE)
-wavy(d, PCX, PCY + 18, 30, 4, WHITE)
+wavy(d, PCX, PCY - 13, 28, 4, WHITE)
+wavy(d, PCX, PCY + 2, 28, 4, WHITE)
+wavy(d, PCX, PCY + 17, 28, 4, WHITE)
 
 # agent nodes: paper disc, ink ring, robot silhouette
 for i in range(10):
@@ -177,7 +185,7 @@ for i in range(10):
     d.ellipse([sc(nx - NODE_R), sc(ny - NODE_R),
                sc(nx + NODE_R), sc(ny + NODE_R)],
               fill=WHITE, outline=INK, width=2 * SS)
-    robot(d, nx, ny, s=0.95)
+    robot(d, nx, ny, s=0.8)
 
 img = img.resize((W, H), Image.LANCZOS)
 img.save(OUT)
