@@ -109,7 +109,7 @@ var FLEET_CONTRACTS = ["commonsv8.bindingvow1106.testnet", "commonsv7.bindingvow
 var RPCS = ["https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org", "https://archival-rpc.testnet.near.org"];
 var YOCTO = 1000000000000000000000000n;
 
-/* ---------- read helper: same FastNEAR 3-endpoint rotation as index.html, per contract ---------- */
+/* ---------- read helper: same FastNEAR 3-endpoint rotation as app.html, per contract ---------- */
 function b64(obj){ return btoa(unescape(encodeURIComponent(JSON.stringify(obj)))); }
 function makeRpc(contractId){
   function rpcOnce(fn, args, attempt){
