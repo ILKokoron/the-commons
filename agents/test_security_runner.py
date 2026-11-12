@@ -74,4 +74,31 @@ assert s == {}
 sr.update_streaks(s, 4, {"greedy": 1})
 assert s["greedy"]["epochs"] == [4]
 
+# record_confirm / record_filed / is_designated_filer: a failed
+# call is never remembered as done (regression: the old code
+# appended unconditionally, so one failed confirm or report left
+# the target hanging forever).
+st = {"confirmed": [], "filed": {}}
+assert sr.record_confirm(st, 7, True) is True
+assert st["confirmed"] == [7]
+assert sr.record_confirm(st, 7, True) is True
+assert st["confirmed"] == [7]  # no duplicate
+assert sr.record_confirm(st, 8, False) is False
+assert st["confirmed"] == [7]  # failed confirm retries next scan
+assert sr.record_filed(st, "greedy",
+                       {"ok": True, "return_value": 3}) == 3
+assert st["filed"] == {"greedy": 3}
+assert sr.record_filed(st, "other",
+                       {"ok": False, "return_value": None}) is None
+assert "other" not in st["filed"]
+assert sr.record_filed(st, "third",
+                       {"ok": True, "return_value": None}) is None
+assert "third" not in st["filed"]
+
+# Designated filer: only the named instance files. When the roster
+# cannot be read (designated None), nobody files.
+assert sr.is_designated_filer("exam1.testnet", "exam1.testnet") is True
+assert sr.is_designated_filer("exam1.testnet", "judge1.testnet") is False
+assert sr.is_designated_filer(None, "exam1.testnet") is False
+
 print("security runner tests passed")
