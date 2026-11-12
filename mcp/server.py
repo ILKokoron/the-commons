@@ -131,12 +131,13 @@ def _contract_flavor():
 
     The version comes from the shared registry's contracts map,
     never from splitting the account name. For a contract the
-    registry does not know, fall back to a get_config probe: a
-    config carrying gas_per_epoch is v4-class; anything else is
-    treated as v1-class. The probe cannot tell v5 from v6, so an
-    unregistered contract never gets v6 semantics; register it in
-    contracts.json for the exact flavour. Resolved once per
-    process."""
+    registry does not know, probe for a v7-only view first
+    (get_solvency); only if that fails fall back to a get_config
+    probe: a config carrying gas_per_epoch is v4-class; anything
+    else is treated as v1-class. The config probe cannot tell v5
+    from v6, so an unregistered contract never gets v6 semantics
+    without the solvency probe; register it in contracts.json for
+    the exact flavour. Resolved once per process."""
     global _FLAVOR
     if _FLAVOR is not None:
         return _FLAVOR
@@ -148,6 +149,13 @@ def _contract_flavor():
             except ValueError:
                 ver = 0
             break
+    if not ver:
+        try:
+            solv = view("get_solvency", {})
+            if isinstance(solv, dict) and "headroom" in solv:
+                ver = 7
+        except Exception:
+            pass
     if not ver:
         cfg = None
         try:
@@ -422,6 +430,10 @@ def to_yocto(amount):
             f"are NEAR too) or a \"<digits>_yocto\" string, "
             f"got {type(amount).__name__}: {amount!r}")
     s = amount.strip()
+    if s == "":
+        raise ValueError(
+            "empty amount: a value is required "
+            "(e.g. \"0.005\" NEAR)")
     if s.endswith("_yocto"):
         core = s[: -len("_yocto")]
         if not core.isdigit():
@@ -486,6 +498,19 @@ def _add_near_fields(obj, fields):
             except (TypeError, ValueError):
                 pass
     return obj
+
+
+def _residue_yocto(room):
+    """What withdraw_residue actually returns for this room: pool +
+    refill reserve + the UNSPENT part of the Guarantee Fund
+    (gf_remaining). The original guarantee_fund is the escrow at
+    creation, not what is left: feeder top-ups eat it as the season
+    runs, so a residue computed from pool + reserve alone understates
+    a Covered room, and the original escrow overstates what is left.
+    Rooms on contracts without gf_remaining read it as 0."""
+    return (int(room["pool_balance"])
+            + int(room["refill_reserve"])
+            + int(room.get("gf_remaining") or 0))
 
 
 def _tx_outcome(tx_hash, signer):
@@ -867,7 +892,7 @@ def commons_status() -> dict:
                 page = view("list_rooms", {"from_index": from_i,
                                            "limit": 50}) or []
                 all_rooms.extend(page)
-                if len(page) < 50 or from_i >= 1000:
+                if len(page) < 50:
                     break
                 from_i += 50
             for room in all_rooms:
@@ -905,15 +930,14 @@ def commons_status() -> dict:
                     except Exception as e:
                         entry["epoch_check_error"] = str(e)
                 elif not room.get("residue_withdrawn"):
-                    residue_y = (int(room["pool_balance"])
-                                 + int(room["refill_reserve"]))
+                    residue_y = _residue_yocto(room)
                     if residue_y > 0:
                         entry["residue_waiting_near"] = \
                             near_str(residue_y)
                         flags.append("residue_waiting")
-                    gf_y = int(room.get("guarantee_fund") or 0)
+                    gf_y = int(room.get("gf_remaining") or 0)
                     if gf_y > 0:
-                        entry["guarantee_fund_escrowed_near"] = \
+                        entry["guarantee_fund_remaining_near"] = \
                             near_str(gf_y)
                 entry["attention"] = flags
                 hosted.append(entry)
@@ -951,7 +975,8 @@ def commons_get_room(room_id: int) -> dict:
             return err(f"room {room_id} does not exist")
         _add_near_fields(room, ["pool_balance", "refill_reserve", "stake",
                                 "refill_per_epoch", "total_paid_out",
-                                "security_pot"])
+                                "security_pot", "guarantee_fund",
+                                "gf_remaining", "retainer_reserve"])
         return {"ok": True, "room": room}
     except Exception as e:
         return err(f"get_room failed: {e}")
@@ -1121,6 +1146,9 @@ def commons_create_room(
             return err(f'invalid refill_mode {refill_mode!r}: must '
                        'be "Flat" or "Decaying"')
         reg = reg or "Wild"
+    if not refill_per_epoch:
+        return err("refill_per_epoch is required: pass a NEAR "
+                   "amount such as \"0.001\"")
     try:
         cfg = view("get_config", {})
         fee = int(cfg["room_fee"])
@@ -1255,6 +1283,15 @@ def commons_create_room(
                 "to report a differently-split room as a success")
         else:
             res["verified"] = True
+            # The Guarantee Fund in the breakdown comes from the
+            # Python copy of the contract formula; the read-back
+            # room carries the contract's own number, so report
+            # that one (a drift between the two would otherwise
+            # survive into the result unnoticed).
+            if room.get("guarantee_fund") is not None:
+                res["guarantee_fund"] = str(room["guarantee_fund"])
+                res["breakdown"]["guarantee_fund_near"] = near_str(
+                    int(room["guarantee_fund"]))
     except Exception as e:
         res["ok"] = False
         res["verified"] = False
@@ -1564,7 +1601,7 @@ def commons_commit(
     }
     with _PendingLock():
         state = _load_pending()
-        prev_key, prev_entry = _find_pending(state, room_id, epoch)
+        _, prev_entry = _find_pending(state, room_id, epoch)
         state[commitment] = {
             "room_id": room_id, "epoch": epoch, "amount": str(amount_y),
             "reasoning_hash": reasoning_hash, "log_ref": log_ref,
@@ -1849,8 +1886,51 @@ def commons_confirm_report(report_id: int) -> dict:
 def commons_finalize_room(room_id: int) -> dict:
     """After season end: finalize the room. Splits the security pot
     among qualifying security agents (or folds it into the pool) and
-    marks the room ended, which unlocks the host residue."""
+    marks the room ended, which unlocks the host residue.
+
+    Finalize settles every remaining epoch itself, in one
+    transaction capped at 300 TGas, so a room with a long unsettled
+    backlog (many epochs x many revealers) reverts on gas. Before
+    finalizing, settle the due epochs in installments through
+    commons_settle_room (each its own transaction), so the finalize
+    itself only has to close the room. The pre-settled epochs are
+    reported, and their settle gas is the caller's: a room nobody
+    kept is more expensive to close than one a keeper settled as it
+    ran, and that cost is visible here instead of hidden in a
+    revert. A mid-season finalize skips the pre-settle and fails
+    exactly as before (the contract refuses it until the season
+    ends)."""
+    pre_settled = []
+    try:
+        room = view("get_room", {"room_id": room_id})
+        if room is None:
+            return err(f"room {room_id} does not exist")
+        if not room.get("ended"):
+            try:
+                info = view("current_epoch", {"room_id": room_id})
+                season_over = bool(info.get("season_over"))
+            except Exception:
+                season_over = False
+            if season_over:
+                while True:
+                    s = commons_settle_room(room_id, max_epochs=100)
+                    if not s.get("ok"):
+                        if not s.get("settled"):
+                            return s
+                        pre_settled.extend(s.get("settled") or [])
+                        out = dict(s)
+                        out["pre_settled"] = pre_settled
+                        out["step"] = "pre-settle"
+                        return out
+                    pre_settled.extend(s.get("settled") or [])
+                    if not s.get("settled"):
+                        break
+    except Exception as e:
+        return err(f"finalize pre-settle read failed: {e}")
     res = near_call("finalize_room", {"room_id": room_id})
+    if pre_settled:
+        res["pre_settled"] = pre_settled
+        res["pre_settled_count"] = len(pre_settled)
     if not res["ok"]:
         return res
     try:
@@ -1900,6 +1980,31 @@ def commons_withdraw_residue(room_id: int) -> dict:
         res["verified"] = False
         res["error"] = f"verification failed: {e}"
     return res
+
+
+@server.tool()
+def commons_get_solvency() -> dict:
+    """The contract's storage headroom: balance minus the storage
+    already paid for minus everything the contract owes (every
+    room's pool, refill reserve, unspent Guarantee Fund, security
+    pot and retainer reserve, plus every active agent's stake).
+    The watchdog alarm reads this: headroom is what is actually
+    left to pay for future storage, not the raw balance. Current
+    contract only (v7+); older contracts have no such view."""
+    ver, _v45, _v6p = _contract_flavor()
+    if ver < 7:
+        return err("commons_get_solvency needs the current "
+                   "contract's get_solvency view (v7+); the "
+                   f"configured contract is {CONTRACT}.")
+    try:
+        solv = view("get_solvency", {})
+    except Exception as e:
+        return err(f"get_solvency failed: {e}")
+    if not isinstance(solv, dict):
+        return err("get_solvency returned no data")
+    _add_near_fields(solv, ["balance", "storage_cost", "liabilities",
+                            "headroom"])
+    return {"ok": True, "solvency": solv}
 
 
 @server.tool()
@@ -2168,12 +2273,11 @@ def commons_close_room(room_id: int) -> dict:
                         "error": str(e)})
             return out
     out["finalized"] = True
-    residue_y = (int(room["pool_balance"])
-                 + int(room["refill_reserve"]))
+    residue_y = _residue_yocto(room)
     out["residue_near"] = near_str(residue_y)
-    gf_y = int(room.get("guarantee_fund") or 0)
+    gf_y = int(room.get("gf_remaining") or 0)
     if gf_y > 0:
-        out["guarantee_fund_escrowed_near"] = near_str(gf_y)
+        out["guarantee_fund_remaining_near"] = near_str(gf_y)
         out["guarantee_fund_note"] = (
             "the unspent part of the escrowed Guarantee Fund "
             "returns together with the residue on withdraw")
