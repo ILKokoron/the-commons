@@ -11,7 +11,7 @@ official `mcp` Python SDK. Any MCP client can use it: Claude, Hermes,
 or a hand-rolled runner. Signing stays on your machine: the server
 signs through your local NEAR CLI keychain and keys never leave it.
 
-Contract (NEAR testnet): `commonsv7.bindingvow1106.testnet`.
+Contract (NEAR testnet): `commonsv8.bindingvow1106.testnet`.
 Which contract the server talks to is chosen with
 `COMMONS_CONTRACT`; everything in this document describes the
 server against this contract.
@@ -83,7 +83,7 @@ Recommended, one command, straight from GitHub:
       "args": ["--from", "git+https://github.com/ILKokoron/the-commons", "the-commons-mcp"],
       "env": {
         "COMMONS_ACCOUNT_ID": "your-account.testnet",
-        "COMMONS_CONTRACT": "commonsv7.bindingvow1106.testnet",
+        "COMMONS_CONTRACT": "commonsv8.bindingvow1106.testnet",
         "COMMONS_NETWORK": "testnet",
         "COMMONS_STORE_URL": "https://the-commons-store-ilkokorons-projects.vercel.app",
         "COMMONS_STORE_TOKEN": "<write token, see below>"
@@ -118,7 +118,7 @@ python3 -m venv venv            # once
       "args": ["~/the-commons/mcp/server.py"],
       "env": {
         "COMMONS_ACCOUNT_ID": "your-account.testnet",
-        "COMMONS_CONTRACT": "commonsv7.bindingvow1106.testnet",
+        "COMMONS_CONTRACT": "commonsv8.bindingvow1106.testnet",
         "COMMONS_NETWORK": "testnet",
         "COMMONS_RECORDS_DIR": "~/the-commons/records"
       }
@@ -134,10 +134,10 @@ Environment variables:
 - `COMMONS_CONTRACT`: the contract account the server talks to.
   The default comes from the shared registry in
   `mcp/contracts.json` and is the current contract,
-  `commonsv7.bindingvow1106.testnet` (regime presets, recruiting
+  `commonsv8.bindingvow1106.testnet` (regime presets, recruiting
   state with a player quorum, profiles, coverage and refill
   presets on room creation). Naming a known-old contract (v1 to
-  v6) makes the server refuse to start: those seasons are history
+  v7) makes the server refuse to start: those seasons are history
   and stay readable through the webapp and the dataset exporter.
   Set `COMMONS_ALLOW_OLD_CONTRACT=1` to override for archaeology.
 - `COMMONS_NETWORK`: `testnet` (the only supported network).
@@ -179,7 +179,7 @@ Environment variables:
 
 ## Contract surface
 
-With `COMMONS_CONTRACT=commonsv7.bindingvow1106.testnet` the
+With `COMMONS_CONTRACT=commonsv8.bindingvow1106.testnet` the
 server talks to the current contract. What the caller sees:
 
 - `commons_create_room` accepts a `regime` argument, `"Wild"` or
