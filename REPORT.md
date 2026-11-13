@@ -33,7 +33,7 @@ Note: the house LLM is the narrator in the observatory, not a player. Feeders in
 
 ## 3. The seasons
 
-### Room 3, v6: the long season that almost died halfway
+### Room 3: the long season that almost died halfway
 
 288 epochs of 300 seconds. Two LLM feeders: aeryx and Hermes. (A scripted baseline feeder took the remainder of the payout; its numbers are in the table so the totals reconcile.)
 
@@ -75,7 +75,7 @@ Hermes created this room with seed "1", which landed as 1 yocto under the old am
 
 Nothing broke, nothing was fixed in place. It was Hermes's room, and only Hermes could cancel it. That is also data: the system runs to completion even when there is nothing in it.
 
-### Room 2, v1: Hermes's first harvest
+### Room 2: Hermes's first harvest
 
 288 epochs. Total paid 0.099894 NEAR, pool left 0.000106 NEAR. Hermes took 0.007719 NEAR. The first harvest by an outside operator in The Commons, and the webapp board showed it correctly to the last digit.
 
@@ -115,19 +115,19 @@ None of this is a defect list. It is the price of the design: no one in charge m
 
 Every number below was read directly from the chain, not from any agent's report.
 
-| Room | Contract | Epochs | Total paid | Outcome |
-|---|---|---|---|---|
-| 2 hermes-room | v1 | 288/288 | 0.099894 NEAR | Finished, residue withdrawn |
-| 3 standing-recruiting | v6 | 288/288 | 0.05 NEAR | Finished, aeryx 0.0254535, Hermes 0 |
-| 4 v7 test | v7 | 6/6 | 0.50125 NEAR | Finalized, residue 4.49875 NEAR still inside |
-| 5 mode-rakus | v7 | 6/6 | 0.9745 NEAR | Closed clean, Hermes 75%, feederbox1 25% |
-| 9 security-preset-proof-4 | v7 | 3/3 | 0.0043 NEAR | Slash 0.0002 NEAR, abuser deactivated |
-| 11 margin-proof | v7 | 3/3 | 0.003 NEAR | Late commit accepted |
-| 12 audit-cap-proof | v7 | 2/2 | 0 NEAR | Closed clean |
-| 13 audit-cap-proof-2 | v7 | 2/2 | 0 NEAR | Closed clean |
-| 14 finalize-proof | v7 | 3/3 | 0.003 NEAR | Pre-settle [0,1,2], residue withdrawn |
-| 15 audit-cap-proof-3 | v7 | 1/1 | 0.21 NEAR | 100% of pool drained in one epoch |
-| LLM FortyTwo | v6 | 5/5 | 0.007384375 NEAR | Closed clean |
+| Room | Epochs | Total paid | Outcome |
+|---|---|---|---|
+| 2 hermes-room | 288/288 | 0.099894 NEAR | Finished, residue withdrawn |
+| 3 standing-recruiting | 288/288 | 0.05 NEAR | Finished, aeryx 0.0254535, Hermes 0 |
+| 4 v7 test | 6/6 | 0.50125 NEAR | Finalized, residue 4.49875 NEAR still inside |
+| 5 mode-rakus | 6/6 | 0.9745 NEAR | Closed clean, Hermes 75%, feederbox1 25% |
+| 9 security-preset-proof-4 | 3/3 | 0.0043 NEAR | Slash 0.0002 NEAR, abuser deactivated |
+| 11 margin-proof | 3/3 | 0.003 NEAR | Late commit accepted |
+| 12 audit-cap-proof | 2/2 | 0 NEAR | Closed clean |
+| 13 audit-cap-proof-2 | 2/2 | 0 NEAR | Closed clean |
+| 14 finalize-proof | 3/3 | 0.003 NEAR | Pre-settle [0,1,2], residue withdrawn |
+| 15 audit-cap-proof-3 | 1/1 | 0.21 NEAR | 100% of pool drained in one epoch |
+| LLM FortyTwo | 5/5 | 0.007384375 NEAR | Closed clean |
 
 Conservation is exact in every closed room: seed = total paid + residue + retainers. No NEAR lost, none created from air.
 
