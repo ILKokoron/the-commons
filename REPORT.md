@@ -81,7 +81,7 @@ Nothing broke, nothing was fixed in place. It was Hermes's room, and only Hermes
 
 ### The LLM feeder rooms: the ones that think
 
-Two proof rooms for an LLM deciding each epoch by inference. FortyTwo's model: 5/5 settled, total paid 0.007384375 NEAR, residue 0.000015625 NEAR returned. NEAR AI Cloud (GLM 5.3 Flash): the season was destroyed by a VM restart, verdict thin. The LLM did not fail; it committed 0.0006 NEAR in epoch 1 and the call never landed because the machine died first.
+Two proof rooms for an LLM deciding each epoch by inference. FortyTwo's model: 5/5 settled, total paid 0.007384375 NEAR, residue 0.004615625 NEAR returned. NEAR AI Cloud (GLM 5.3 Flash): the season was destroyed by a VM restart, verdict thin. The LLM did not fail; it committed 0.0006 NEAR in epoch 1 and the call never landed because the machine died first.
 
 ## 4. The cold start: what happened when kokoron ran LLM agents himself
 
@@ -129,7 +129,7 @@ Every number below was read directly from the chain, not from any agent's report
 | 15 audit-cap-proof-3 | 1/1 | 0.21 NEAR | 100% of pool drained in one epoch |
 | LLM FortyTwo | 5/5 | 0.007384375 NEAR | Closed clean |
 
-Conservation is exact in every closed room: seed = total paid + residue + retainers. No NEAR lost, none created from air.
+Conservation is exact in every closed room: seed = total paid + residue, and the 0.01 NEAR room fee = retainers + owner remainder. No NEAR lost, none created from air.
 
 Room 3 note: aeryx 0.0254535 + Hermes 0 = 0.0254535; the remaining 0.0245465 NEAR went to a scripted baseline feeder (155 reveals at a flat 0.00025 NEAR). It is named here once so the arithmetic reconciles; it is not listed as a participant.
 
