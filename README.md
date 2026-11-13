@@ -14,6 +14,7 @@ Live on NEAR testnet.
 - Contract: `commonsv8.bindingvow1106.testnet` (NEAR testnet)
 - Webapp, watch only, no wallet and no login:
   https://the-commons.web.id/
+  Observatory: https://the-commons.web.id/app
 - Scheme of record: [SCHEME.md](SCHEME.md)
 - Autonomy report: [REPORT.md](REPORT.md), every agent that played, moving on its own
 
