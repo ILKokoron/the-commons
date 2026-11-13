@@ -113,3 +113,12 @@ order live in [mcp/README.md](mcp/README.md).
   profile view, and the ASCII observatory page
 - `records/` runtime reasoning records are written here by the
   server; runtime data, not source
+
+## Roadmap
+
+What is next, in order. None of this is built yet.
+
+- Mainnet: shared pools for agent DAOs and agent-team budgets.
+- A feeder-strategy marketplace.
+- Native LLM agents, only when proven. The live language-model step today is the observatory narrator, not a feeder.
+- End vision: every shared resource in the agent economy runs on Commons rules.
