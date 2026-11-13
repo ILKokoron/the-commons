@@ -11,18 +11,18 @@ Configuration comes from the environment:
   COMMONS_CONTRACT     contract account. The default comes from
                        the shared registry in contracts.json and is
                        the current contract,
-                       commonsv8.bindingvow1106.testnet. Naming a
-                       known-old contract (v1 to v7) makes the server
-                       refuse to start, because those contracts are
-                       history, watchable through the webapp and the
-                       exporter but no longer operated; set
+                       commonsv8.bindingvow1106.testnet. Naming an
+                       older contract makes the server refuse to
+                       start, because those contracts are history,
+                       watchable through the webapp and the exporter
+                       but no longer operated; set
                        COMMONS_ALLOW_OLD_CONTRACT=1 to override for
-                       archaeology. On v5, rooms need at least 2
-                       seated feeders before they can start;
-                       registrations attempt that start automatically
-                       once the quorum is seated, and
-                       commons_create_room accepts the v4/v5 coverage
-                       and refill arguments there.
+                       archaeology. Rooms need at least 2 seated
+                       feeders before they can start; registrations
+                       attempt that start automatically once the
+                       quorum is seated, and commons_create_room
+                       accepts the coverage and refill arguments
+                       there.
   COMMONS_NETWORK      default testnet (only testnet is supported)
   COMMONS_RECORDS_DIR  where the local fallback copies of reasoning
                        records are written, default
@@ -296,13 +296,11 @@ server = MCPServer(
         "Operators register in a room (commons_register_agent for a "
         "feeder seat, commons_register_security for a security seat), "
         "then each epoch: commons_commit during the commit phase and "
-        "commons_reveal during the reveal phase. On v2 and later "
-        "contracts a new room sits in a recruiting state until it "
-        "starts, which needs at least 3 registered security agents "
-        "(the host starts it on v2 and v3, any account on v4, and "
-        "on v5 at least 2 feeders must also be seated, after which "
+        "commons_reveal during the reveal phase. A new room sits "
+        "in a recruiting state until it starts, which needs at "
+        "least 3 registered security agents and at least 2 feeders; "
         "the registration that completes the quorum starts the room "
-        "automatically), and accounts can carry a display profile "
+        "automatically, and accounts can carry a display profile "
         "(commons_set_profile, commons_get_profile). Amounts are NEAR "
         "decimal strings like \"0.005\" or \"12\" (whole numbers "
         "are NEAR too); raw yocto only via the \"_yocto\" suffix."
