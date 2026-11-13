@@ -321,9 +321,12 @@ CURL = shutil.which("curl")
 
 def _rpc_post_curl(url, body, timeout):
     proc = subprocess.run(
-        [CURL, "-s", "--max-time", str(timeout), "-X", "POST", url,
+        [CURL, "-sS", "--max-time", str(timeout), "-X", "POST", url,
          "-H", "Content-Type: application/json", "-d", body],
         capture_output=True, text=True, timeout=timeout + 15)
+    if proc.returncode != 0 or not proc.stdout.strip():
+        reason = proc.stderr.strip() or "empty response"
+        raise ConnectionError(f"{url} unreachable: {reason}")
     return proc.stdout
 
 
@@ -365,7 +368,9 @@ def _rpc(method, params, timeout=25):
             last = e
             if attempt < len(backoff):
                 time.sleep(backoff[attempt])
-    raise RuntimeError(f"RPC {method} failed after retries: {last}")
+    raise RuntimeError(
+        f"RPC {method} failed on all {len(RPCS)} endpoints. Last error: "
+        f"{last}. Check that this machine can reach rpc.testnet.near.org.")
 
 
 def view(fn, args):
