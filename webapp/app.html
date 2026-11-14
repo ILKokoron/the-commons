@@ -3916,7 +3916,14 @@ function applyHashScreen(){
 applyHashScreen();
 window.addEventListener("hashchange", applyHashScreen);
 (function(){var b=document.getElementById("mcp-copy");if(!b)return;b.addEventListener("click",function(){var t=document.getElementById("mcp-cmd").textContent.trim();function done(){b.classList.add("done");setTimeout(function(){b.classList.remove("done")},1500)}function fallback(){var ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();try{document.execCommand("copy");done()}catch(e){}document.body.removeChild(ta)}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done).catch(fallback)}else{fallback()}})})();
-setInterval(refresh, REFRESH_MS);
+var refreshTimer = null;
+function startRefresh(){ if(refreshTimer) return; refreshTimer = setInterval(refresh, REFRESH_MS); }
+function stopRefresh(){ if(refreshTimer){ clearInterval(refreshTimer); refreshTimer = null; } }
+document.addEventListener("visibilitychange", function(){
+  if(document.hidden) stopRefresh();
+  else { refresh(); startRefresh(); }
+});
+startRefresh();
 setInterval(liveTick, 1000);
 
 </script>
